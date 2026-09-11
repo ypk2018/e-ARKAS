@@ -1,0 +1,8 @@
+{
+  "name": "SIBOS 7 Sentani - Kertas Kerja Tema & Subtema BOSP",
+  "description": "Aplikasi Terpadu Kertas Kerja Bulanan dan SPJ BOSP 2026 SMP Negeri 7 Sentani berbasis Tema (Standar) dan Subtema (Program/Kegiatan)",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

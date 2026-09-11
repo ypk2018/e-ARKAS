@@ -1,0 +1,72 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-natural: #FDFBF7;
+    --surface-natural: #F9F7F2;
+    --surface-header: #F2EDE4;
+    --surface-active: #E8E2D6;
+    --border-natural: #E0DACE;
+    --border-subtle: #D9D1C2;
+    --text-primary: #2C2A28;
+    --text-secondary: #3E3C3A;
+    --text-muted: #6B665E;
+    --text-caption: #8C867E;
+    --accent-olive: #5A5A40;
+    --accent-olive-dark: #454530;
+    --accent-terracotta: #C06E52;
+    --accent-terracotta-dark: #8B4513;
+  }
+
+  body {
+    background-color: #FDFBF7;
+    color: #3E3C3A;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  h1, h2, h3, h4, .font-serif {
+    font-family: 'Newsreader', Georgia, serif;
+  }
+}
+
+/* Custom scrollbars in natural tones */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #F2EDE4;
+}
+::-webkit-scrollbar-thumb {
+  background: #D9D1C2;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #C8BFAD;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  aside, header, nav, button, .print\:hidden {
+    display: none !important;
+  }
+
+  #printable-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
