@@ -58,6 +58,7 @@ interface ArkasPerubahanViewProps {
   onOpenSpjDoc?: (doc: SpjDocument) => void;
   onAddActivityLog?: (log: any) => void;
   currentUser?: UserAccount;
+  onNavigateToRekapPerubahan?: () => void;
 }
 
 export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
@@ -74,11 +75,16 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   documents = [],
   onOpenSpjDoc,
   onAddActivityLog,
-  currentUser
+  currentUser,
+  onNavigateToRekapPerubahan
 }) => {
   const currentWs = worksheets[selectedMonth] || worksheets[0];
   const [selectedTemaFilter, setSelectedTemaFilter] = useState<string>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('AKTIF');
+  const [eliminationNotice, setEliminationNotice] = useState<{
+    item: ArkasPerubahanItem;
+    amount: number;
+  } | null>(null);
 
   // Modal states
   const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
@@ -190,7 +196,9 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
       if (selectedTemaFilter !== 'all' && item.temaId !== selectedTemaFilter) {
         return false;
       }
-      if (selectedStatusFilter !== 'all' && item.statusPerubahan !== selectedStatusFilter) {
+      if (selectedStatusFilter === 'AKTIF') {
+        if (item.statusPerubahan === 'DIHILANGKAN') return false;
+      } else if (selectedStatusFilter !== 'all' && item.statusPerubahan !== selectedStatusFilter) {
         return false;
       }
       if (searchQuery.trim()) {
@@ -368,25 +376,41 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   const handleConfirmCancel = () => {
     if (!cancelingItem) return;
 
-    const updatedItems = currentWs.items.map((it) => {
-      if (it.id === cancelingItem.id) {
-        return {
-          ...it,
-          volume: 0,
-          jumlah: 0,
-          selisihJumlah: -it.semulaJumlah,
-          selisihVolume: -it.semulaVolume,
-          statusPerubahan: 'DIHILANGKAN' as PerubahanStatus,
-          alasanPerubahan: cancelReason || 'Dihilangkan / dibatalkan dalam ARKAS Perubahan',
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return it;
-    });
+    const targetItem = cancelingItem;
+    const isItemBaru = targetItem.statusPerubahan === 'BARU';
+
+    let updatedItems: ArkasPerubahanItem[];
+
+    if (isItemBaru) {
+      // Jika item baru yang tidak terdapat di Murni, hapus dari daftar
+      updatedItems = currentWs.items.filter((it) => it.id !== targetItem.id);
+    } else {
+      // Jika item dari Murni, set Rp 0 dan beri status DIHILANGKAN
+      updatedItems = currentWs.items.map((it) => {
+        if (it.id === targetItem.id) {
+          return {
+            ...it,
+            volume: 0,
+            jumlah: 0,
+            selisihJumlah: -it.semulaJumlah,
+            selisihVolume: -it.semulaVolume,
+            statusPerubahan: 'DIHILANGKAN' as PerubahanStatus,
+            alasanPerubahan: cancelReason || 'Dihilangkan / dibatalkan dalam ARKAS Perubahan',
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return it;
+      });
+    }
 
     onUpdateWorksheet({
       ...currentWs,
       items: updatedItems
+    });
+
+    setEliminationNotice({
+      item: targetItem,
+      amount: targetItem.semulaJumlah
     });
 
     if (onAddActivityLog && currentUser) {
@@ -395,7 +419,7 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
         actorRole: currentUser.role,
         actionType: 'EDIT_PERUBAHAN',
         title: `${currentUser.role === 'KEPSEK' ? 'Kepala Sekolah' : 'Bendahara'} meniadakan belanja di ARKAS Perubahan`,
-        description: `Penghilangan belanja: "${cancelingItem.uraian}" (Pengurangan ${formatRp(cancelingItem.semulaJumlah)})`,
+        description: `Penghilangan belanja: "${targetItem.uraian}" (Pengurangan ${formatRp(targetItem.semulaJumlah)})`,
         targetType: 'perubahan',
         targetMonthIndex: selectedMonth
       });
@@ -477,6 +501,17 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {onNavigateToRekapPerubahan && (
+              <button
+                onClick={onNavigateToRekapPerubahan}
+                className="flex items-center gap-1.5 bg-[#047857] hover:bg-[#065f46] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Buka Rekapan Komprehensif Perubahan Anggaran 12 Bulan & 8 Standar"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span>Rekapan Perubahan Anggaran</span>
+              </button>
+            )}
+
             <button
               onClick={handleOpenAdd}
               className="flex items-center gap-2 bg-[#059669] hover:bg-[#047857] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
@@ -660,42 +695,46 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
           {/* Status filter tabs */}
           <div className="flex items-center bg-[#F9F7F2] p-1 rounded-xl border border-[#E0DACE] text-xs font-semibold overflow-x-auto">
             <button
-              onClick={() => setSelectedStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
-                selectedStatusFilter === 'all'
-                  ? 'bg-[#5A5A40] text-white shadow-2xs'
+              onClick={() => setSelectedStatusFilter('AKTIF')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+                selectedStatusFilter === 'AKTIF'
+                  ? 'bg-[#5A5A40] text-white shadow-2xs font-bold'
                   : 'text-[#6B665E] hover:text-[#2C2A28]'
               }`}
+              title="Menampilkan belanja aktif (item dihilangkan disembunyikan)"
             >
-              Semua ({currentWs.items.length})
-            </button>
-            <button
-              onClick={() => setSelectedStatusFilter('BARU')}
-              className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
-                selectedStatusFilter === 'BARU'
-                  ? 'bg-emerald-700 text-white shadow-2xs'
-                  : 'text-emerald-700 hover:bg-emerald-50'
-              }`}
-            >
-              <span>+ Baru</span>
-              <span>({counts.baru})</span>
+              <span>Belanja Aktif</span>
+              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${selectedStatusFilter === 'AKTIF' ? 'bg-white/20 text-white' : 'bg-[#E0DACE] text-[#5C5852]'}`}>
+                {currentWs.items.length - counts.dihilangkan}
+              </span>
             </button>
             <button
               onClick={() => setSelectedStatusFilter('DIHILANGKAN')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
                 selectedStatusFilter === 'DIHILANGKAN'
-                  ? 'bg-rose-700 text-white shadow-2xs'
+                  ? 'bg-rose-700 text-white shadow-2xs font-bold'
                   : 'text-rose-700 hover:bg-rose-50'
               }`}
+              title="Lihat daftar rincian belanja yang ditiadakan/dihilangkan"
             >
-              <span>Dihilangkan</span>
-              <span>({counts.dihilangkan})</span>
+              <Ban className="w-3 h-3" />
+              <span>Dihilangkan ({counts.dihilangkan})</span>
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('BARU')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                selectedStatusFilter === 'BARU'
+                  ? 'bg-emerald-700 text-white shadow-2xs font-bold'
+                  : 'text-emerald-700 hover:bg-emerald-50'
+              }`}
+            >
+              <span>+ Baru ({counts.baru})</span>
             </button>
             <button
               onClick={() => setSelectedStatusFilter('BERTAMBAH')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 selectedStatusFilter === 'BERTAMBAH'
-                  ? 'bg-blue-700 text-white shadow-2xs'
+                  ? 'bg-blue-700 text-white shadow-2xs font-bold'
                   : 'text-blue-700 hover:bg-blue-50'
               }`}
             >
@@ -705,11 +744,22 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
               onClick={() => setSelectedStatusFilter('BERKURANG')}
               className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                 selectedStatusFilter === 'BERKURANG'
-                  ? 'bg-amber-700 text-white shadow-2xs'
+                  ? 'bg-amber-700 text-white shadow-2xs font-bold'
                   : 'text-amber-700 hover:bg-amber-50'
               }`}
             >
               Berkurang ({counts.berkurang})
+            </button>
+            <button
+              onClick={() => setSelectedStatusFilter('all')}
+              className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                selectedStatusFilter === 'all'
+                  ? 'bg-gray-800 text-white shadow-2xs font-bold'
+                  : 'text-[#6B665E] hover:text-[#2C2A28]'
+              }`}
+              title="Semua rincian termasuk yang dihilangkan"
+            >
+              Semua ({currentWs.items.length})
             </button>
           </div>
 
@@ -743,6 +793,87 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
           />
         </div>
       </div>
+
+      {/* Elimination Notice Toast Banner */}
+      {eliminationNotice && (
+        <div className="bg-rose-50 border border-rose-200 p-3.5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-rose-900 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <Ban className="w-4 h-4 text-rose-600 shrink-0" />
+            <div>
+              <span>
+                Rincian belanja <strong>"{eliminationNotice.item.uraian}"</strong> telah dihilangkan dari lembar kerja aktif.
+                Pengurangan anggaran <strong>{formatRp(eliminationNotice.amount)}</strong> tercatat di Rekapan Perubahan.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+            <button
+              onClick={() => {
+                handleRestoreItem(eliminationNotice.item);
+                setEliminationNotice(null);
+              }}
+              className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-semibold flex items-center gap-1 cursor-pointer transition"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Pulihkan</span>
+            </button>
+            {onNavigateToRekapPerubahan && (
+              <button
+                onClick={onNavigateToRekapPerubahan}
+                className="px-2.5 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-semibold flex items-center gap-1 cursor-pointer transition shadow-2xs"
+              >
+                <FileSpreadsheet className="w-3 h-3" />
+                <span>Lihat Rekapan</span>
+              </button>
+            )}
+            <button
+              onClick={() => setEliminationNotice(null)}
+              className="p-1 text-rose-500 hover:text-rose-800 cursor-pointer"
+              title="Tutup pemberitahuan"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Filter Context Information Banner */}
+      {selectedStatusFilter === 'AKTIF' && counts.dihilangkan > 0 && (
+        <div className="px-4 py-2 bg-amber-50/70 border border-amber-200/80 rounded-xl text-xs text-amber-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span>
+              Terdapat <strong>{counts.dihilangkan} rincian belanja dihilangkan (Rp 0)</strong> yang disembunyikan dari tabel lembar kerja aktif ini.
+            </span>
+          </div>
+          <button
+            onClick={() => setSelectedStatusFilter('DIHILANGKAN')}
+            className="text-amber-800 hover:text-amber-950 font-bold underline text-[11px] cursor-pointer shrink-0"
+          >
+            Tampilkan Yang Dihilangkan ({counts.dihilangkan}) &rarr;
+          </button>
+        </div>
+      )}
+
+      {selectedStatusFilter === 'DIHILANGKAN' && (
+        <div className="px-4 py-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Ban className="w-4 h-4 text-rose-700 shrink-0" />
+            <span>
+              Menampilkan <strong>{filteredItems.length} belanja yang dihilangkan</strong> pada bulan {MONTH_NAMES[selectedMonth]}. Belanja ini diubah menjadi Rp 0 dan dikecualikan dari total anggaran berjalan.
+            </span>
+          </div>
+          {onNavigateToRekapPerubahan && (
+            <button
+              onClick={onNavigateToRekapPerubahan}
+              className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white rounded-lg font-semibold flex items-center gap-1.5 cursor-pointer shrink-0 text-xs"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" />
+              <span>Buka Rekapan Perubahan</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Comparative Master Table */}
       <div className="bg-white rounded-[28px] border border-[#E0DACE] shadow-xs overflow-hidden">

@@ -12,6 +12,7 @@ import { UserManagementView } from './components/UserManagementView';
 import { LoginView } from './components/LoginView';
 import { PrintModal } from './components/PrintModal';
 import { ArkasPerubahanView } from './components/ArkasPerubahanView';
+import { RekapPerubahanView } from './components/RekapPerubahanView';
 
 import {
   SchoolProfile,
@@ -514,6 +515,43 @@ export function App() {
     setActivityLogs((prev) => [newLog, ...prev]);
   };
 
+  // Restore an eliminated item in Perubahan back to Murni original values
+  const handleRestorePerubahanItem = (item: ArkasPerubahanItem, monthIndex: number) => {
+    setPerubahanWorksheets((prev) => {
+      return prev.map((ws, idx) => {
+        if (idx !== monthIndex) return ws;
+        return {
+          ...ws,
+          items: ws.items.map((it) => {
+            if (it.id !== item.id) return it;
+            return {
+              ...it,
+              volume: it.semulaVolume,
+              satuan: it.semulaSatuan,
+              tarifHarga: it.semulaTarif,
+              jumlah: it.semulaJumlah,
+              selisihJumlah: 0,
+              selisihVolume: 0,
+              statusPerubahan: 'TETAP' as const,
+              alasanPerubahan: 'Dipulihkan kembali ke kondisi semula',
+              updatedAt: new Date().toISOString()
+            };
+          })
+        };
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'EDIT_PERUBAHAN',
+      title: 'Memulihkan rincian belanja di ARKAS Perubahan',
+      description: `Rincian "${item.uraian}" dipulihkan (${MONTH_NAMES[monthIndex]})`,
+      targetType: 'perubahan',
+      targetMonthIndex: monthIndex
+    });
+  };
+
   const handleExportJSON = () => {
     const backup = {
       school,
@@ -536,7 +574,7 @@ export function App() {
   }
 
   // KPI Calculations (Context-aware for ARKAS Murni vs ARKAS Perubahan)
-  const isPerubahanTab = currentTab === 'arkas-perubahan';
+  const isPerubahanTab = currentTab === 'arkas-perubahan' || currentTab === 'rekap-perubahan';
   const currentMonthTotal = isPerubahanTab
     ? (perubahanWorksheets[selectedMonth]?.items.reduce((s, it) => s + (it.statusPerubahan === 'DIHILANGKAN' ? 0 : it.jumlah), 0) || 0)
     : (worksheets[selectedMonth]?.items.reduce((s, it) => s + it.jumlah, 0) || 0);
@@ -631,6 +669,23 @@ export function App() {
                 documents={documents}
                 onOpenSpjDoc={handleOpenDocument}
                 onAddActivityLog={handleAddActivityLog}
+                currentUser={currentUser}
+                onNavigateToRekapPerubahan={() => setCurrentTab('rekap-perubahan')}
+              />
+            )}
+
+            {currentTab === 'rekap-perubahan' && (
+              <RekapPerubahanView
+                school={school}
+                worksheets={perubahanWorksheets}
+                murniWorksheets={worksheets}
+                onSelectMonthAndTab={(mIdx, tab) => {
+                  setSelectedMonth(mIdx);
+                  setCurrentTab(tab);
+                }}
+                onRestoreItem={(item, monthIndex) => {
+                  handleRestorePerubahanItem(item, monthIndex);
+                }}
                 currentUser={currentUser}
               />
             )}

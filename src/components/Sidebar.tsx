@@ -47,8 +47,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Beranda & Ringkasan', icon: LayoutDashboard, badge: '2026' },
     { id: 'kertas-kerja', label: 'Kertas Kerja Bulanan (Murni)', icon: TableProperties, highlight: true },
     { id: 'arkas-perubahan', label: 'ARKAS PERUBAHAN', icon: GitCompare, badge: 'PERUBAHAN', badgeColor: 'bg-[#059669]' },
+    { id: 'rekap-perubahan', label: 'Rekap ARKAS Perubahan', icon: FileSpreadsheet, badge: 'REKAP', badgeColor: 'bg-[#047857]' },
     { id: 'tema-explorer', label: 'Penjelajah Tema & Subtema', icon: Layers },
-    { id: 'rekap', label: 'Rekapitulasi 8 Standar', icon: FileSpreadsheet },
+    { id: 'rekap', label: 'Rekapitulasi 8 Standar (Murni)', icon: FileSpreadsheet },
   ];
 
   const spjItems = [
