@@ -27,7 +27,10 @@ import {
   RotateCcw,
   Ban,
   HelpCircle,
-  GitCompare
+  GitCompare,
+  ArrowRightLeft,
+  Save,
+  CalendarDays
 } from 'lucide-react';
 import {
   ArkasPerubahanMonthWorksheet,
@@ -59,6 +62,12 @@ interface ArkasPerubahanViewProps {
   onAddActivityLog?: (log: any) => void;
   currentUser?: UserAccount;
   onNavigateToRekapPerubahan?: () => void;
+  onSaveItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
+  onEditItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
+  onHilangkanItem?: (item: ArkasPerubahanItem, monthIndex: number, reason?: string) => void;
+  onMoveItem?: (item: ArkasPerubahanItem, fromMonthIndex: number, toMonthIndex: number, reason?: string) => void;
+  onHapusTotalItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
+  onRestoreItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
 }
 
 export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
@@ -76,7 +85,13 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   onOpenSpjDoc,
   onAddActivityLog,
   currentUser,
-  onNavigateToRekapPerubahan
+  onNavigateToRekapPerubahan,
+  onSaveItem,
+  onEditItem,
+  onHilangkanItem,
+  onMoveItem,
+  onHapusTotalItem,
+  onRestoreItem
 }) => {
   const currentWs = worksheets[selectedMonth] || worksheets[0];
   const [selectedTemaFilter, setSelectedTemaFilter] = useState<string>('all');
@@ -85,12 +100,17 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
     item: ArkasPerubahanItem;
     amount: number;
   } | null>(null);
+  const [savedToast, setSavedToast] = useState<string | null>(null);
 
   // Modal states
   const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
   const [editingItem, setEditingItem] = useState<ArkasPerubahanItem | null>(null);
   const [cancelingItem, setCancelingItem] = useState<ArkasPerubahanItem | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
+  const [movingItem, setMovingItem] = useState<ArkasPerubahanItem | null>(null);
+  const [targetMoveMonth, setTargetMoveMonth] = useState<number>((selectedMonth + 1) % 12);
+  const [targetMoveReason, setTargetMoveReason] = useState<string>('');
+  const [hapusTotalItem, setHapusTotalItem] = useState<ArkasPerubahanItem | null>(null);
 
   // Form states for Add / Edit
   const [formKodeRekening, setFormKodeRekening] = useState<string>('5.1.02.01.01.0024');
@@ -456,6 +476,56 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
       ...currentWs,
       items: updatedItems
     });
+  };
+
+  // Action: Simpan item
+  const handleSaveItemClick = (item: ArkasPerubahanItem) => {
+    if (onSaveItem) {
+      onSaveItem(item, selectedMonth);
+    } else {
+      const updatedItems = currentWs.items.map((it) =>
+        it.id === item.id ? { ...it, isSaved: true, savedAt: new Date().toISOString() } : it
+      );
+      onUpdateWorksheet({ ...currentWs, items: updatedItems });
+    }
+    setSavedToast(`Rincian "${item.uraian}" berhasil disimpan & diverifikasi`);
+    setTimeout(() => setSavedToast(null), 3000);
+  };
+
+  // Action: Pindahkan item ke bulan lain
+  const handleOpenMoveModal = (item: ArkasPerubahanItem) => {
+    setMovingItem(item);
+    const nextM = (selectedMonth + 1) % 12;
+    setTargetMoveMonth(nextM);
+    setTargetMoveReason(`Pergeseran jadwal pelaksanaan ke bulan ${MONTH_NAMES[nextM]}`);
+  };
+
+  const handleConfirmMove = () => {
+    if (!movingItem) return;
+    if (onMoveItem) {
+      onMoveItem(movingItem, selectedMonth, targetMoveMonth, targetMoveReason);
+    }
+    setSavedToast(`Rincian "${movingItem.uraian}" berhasil dipindahkan ke bulan ${MONTH_NAMES[targetMoveMonth]}`);
+    setMovingItem(null);
+    setTimeout(() => setSavedToast(null), 3500);
+  };
+
+  // Action: Hapus total
+  const handleOpenHapusTotal = (item: ArkasPerubahanItem) => {
+    setHapusTotalItem(item);
+  };
+
+  const handleConfirmHapusTotal = () => {
+    if (!hapusTotalItem) return;
+    if (onHapusTotalItem) {
+      onHapusTotalItem(hapusTotalItem, selectedMonth);
+    } else {
+      const updatedItems = currentWs.items.filter((it) => it.id !== hapusTotalItem.id);
+      onUpdateWorksheet({ ...currentWs, items: updatedItems });
+    }
+    setSavedToast(`Rincian "${hapusTotalItem.uraian}" telah dihapus total permanen`);
+    setHapusTotalItem(null);
+    setTimeout(() => setSavedToast(null), 3000);
   };
 
   // Permanently delete newly added item (BARU)
@@ -888,8 +958,8 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                 <th className="py-3 px-3 text-right w-28 font-serif bg-[#FAF8F4]">Semula (Murni)</th>
                 <th className="py-3 px-3 text-right w-28 font-serif bg-[#EFF5ED]">Menjadi (Perub)</th>
                 <th className="py-3 px-3 text-right w-28 font-serif">Selisih (+/-)</th>
-                <th className="py-3 px-3 text-center w-36 font-serif">Status SPJ Resmi</th>
-                <th className="py-3 px-3 text-center w-32 font-serif">Aksi & SPJ</th>
+                <th className="py-3 px-3 text-center w-32 font-serif">Status SPJ</th>
+                <th className="py-3 px-3 text-center w-44 font-serif">Pilihan Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#E0DACE]">
@@ -1052,32 +1122,22 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                         )}
                       </td>
 
-                      {/* Action buttons */}
+                      {/* Action buttons: Hilangkan, Simpan, Edit, Pindahkan ke bulan lain */}
                       <td className="py-3 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">
-                          {/* Ubah */}
-                          <button
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 text-[#5A5A40] hover:bg-[#E8E2D6] rounded-lg transition cursor-pointer"
-                            title="Ubah rincian volume / tarif / alasan"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Hilangkan Belanja (untuk item yang belum dihilangkan) */}
-                          {!isDihilangkan && (
+                          {/* 1. Hilangkan / Pulihkan */}
+                          {!isDihilangkan ? (
                             <button
+                              type="button"
                               onClick={() => handleOpenCancelModal(item)}
-                              className="p-1.5 text-rose-600 hover:bg-rose-100 rounded-lg transition cursor-pointer"
-                              title="Hilangkan / batalkan rincian belanja ini pada ARKAS Perubahan"
+                              className="p-1.5 text-rose-600 hover:bg-rose-100 hover:text-rose-800 rounded-lg transition cursor-pointer"
+                              title="Hilangkan belanja ini pada ARKAS Perubahan (Rp 0)"
                             >
                               <Ban className="w-3.5 h-3.5" />
                             </button>
-                          )}
-
-                          {/* Pulihkan Belanja (untuk item yang dihilangkan) */}
-                          {isDihilangkan && (
+                          ) : (
                             <button
+                              type="button"
                               onClick={() => handleRestoreItem(item)}
                               className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition cursor-pointer"
                               title="Pulihkan belanja ini kembali ke pagu semula"
@@ -1086,16 +1146,53 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                             </button>
                           )}
 
-                          {/* Hapus permanen jika item baru yang salah input */}
-                          {isBaru && (
-                            <button
-                              onClick={() => handleDeleteNewItem(item.id, item.uraian)}
-                              className="p-1.5 text-[#8C867E] hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title="Hapus permanen item baru ini"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          {/* 2. Simpan */}
+                          <button
+                            type="button"
+                            onClick={() => handleSaveItemClick(item)}
+                            className={`p-1.5 rounded-lg transition cursor-pointer ${
+                              item.isSaved
+                                ? 'text-emerald-700 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300'
+                                : 'text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800'
+                            }`}
+                            title={
+                              item.isSaved
+                                ? `Tersimpan & diverifikasi ${item.savedAt ? '(' + formatTanggalIndo(item.savedAt.slice(0, 10)) + ')' : ''} - Klik untuk simpan ulang`
+                                : 'Simpan / verifikasi rincian belanja ini'
+                            }
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* 3. Edit */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 text-[#5A5A40] hover:bg-[#E8E2D6] rounded-lg transition cursor-pointer"
+                            title="Edit rincian volume / tarif / alasan"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* 4. Pindahkan ke bulan lain */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenMoveModal(item)}
+                            className="p-1.5 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 rounded-lg transition cursor-pointer"
+                            title="Pindahkan rincian belanja ini ke bulan lain"
+                          >
+                            <ArrowRightLeft className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* 5. Hapus Total */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenHapusTotal(item)}
+                            className="p-1.5 text-[#8C867E] hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Hapus total rincian belanja ini secara permanen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1391,6 +1488,131 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Modal Pindahkan Belanja ke Bulan Lain */}
+      {movingItem && (
+        <div className="fixed inset-0 z-50 bg-[#2C2A28]/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-[28px] p-6 max-w-md w-full shadow-xl border border-[#E0DACE] space-y-4">
+            <div className="flex items-center gap-2 text-indigo-700">
+              <ArrowRightLeft className="w-5 h-5" />
+              <h3 className="text-base font-serif font-bold text-[#2C2A28]">
+                Pindahkan Belanja ke Bulan Lain
+              </h3>
+            </div>
+
+            <p className="text-xs text-[#5C5852] leading-relaxed">
+              Memindahkan rincian belanja dari bulan <b>{MONTH_NAMES[selectedMonth]}</b> ke bulan pelaksanaan lain. Di bulan asal belanja akan dialihkan/ditiadakan, dan di bulan tujuan akan ditambahkan secara terstruktur.
+            </p>
+
+            <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-1 text-xs">
+              <div className="font-bold text-[#2C2A28]">{movingItem.uraian}</div>
+              <div className="text-indigo-900 font-mono text-[11px] flex justify-between">
+                <span>Alokasi: {movingItem.volume || movingItem.semulaVolume} {movingItem.satuan || movingItem.semulaSatuan}</span>
+                <span className="font-bold">{formatRp(movingItem.jumlah || movingItem.semulaJumlah)}</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#2C2A28] text-xs mb-1">
+                Pilih Bulan Tujuan Pemindahan:
+              </label>
+              <select
+                value={targetMoveMonth}
+                onChange={(e) => setTargetMoveMonth(parseInt(e.target.value, 10))}
+                className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs font-semibold text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+              >
+                {MONTH_NAMES.map((mName, mIdx) => (
+                  <option key={mIdx} value={mIdx} disabled={mIdx === selectedMonth}>
+                    {mName} {mIdx === selectedMonth ? '(Bulan Saat Ini - Asal)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[#2C2A28] text-xs mb-1">
+                Alasan / Keterangan Pergeseran Bulan:
+              </label>
+              <textarea
+                rows={2}
+                value={targetMoveReason}
+                onChange={(e) => setTargetMoveReason(e.target.value)}
+                className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="mis. Penyesuaian jadwal pelaksanaan kegiatan ke bulan tersebut..."
+              ></textarea>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setMovingItem(null)}
+                className="px-4 py-2 text-[#6B665E] hover:bg-[#F2EDE4] rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmMove}
+                className="px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer transition active:scale-95 flex items-center gap-1.5"
+              >
+                <ArrowRightLeft className="w-3.5 h-3.5" />
+                <span>Pindahkan ke {MONTH_NAMES[targetMoveMonth]}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Total */}
+      {hapusTotalItem && (
+        <div className="fixed inset-0 z-50 bg-[#2C2A28]/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-[28px] p-6 max-w-md w-full shadow-xl border border-rose-200 space-y-4">
+            <div className="flex items-center gap-2 text-rose-700">
+              <Trash2 className="w-5 h-5" />
+              <h3 className="text-base font-serif font-bold text-rose-900">
+                Hapus Total Rincian Belanja
+              </h3>
+            </div>
+
+            <p className="text-xs text-[#5C5852] leading-relaxed">
+              PERHATIAN: Apakah Anda yakin ingin <b>MENGHAPUS TOTAL</b> rincian belanja berikut secara permanen? Tindakan ini akan menghapus data sepenuhnya dari lembar kerja ARKAS Perubahan.
+            </p>
+
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl space-y-1 text-xs">
+              <div className="font-bold text-[#2C2A28]">{hapusTotalItem.uraian}</div>
+              <div className="text-rose-800 font-mono text-[11px]">
+                Kode: {hapusTotalItem.kodeRekening} &bull; Nilai: {formatRp(hapusTotalItem.jumlah || hapusTotalItem.semulaJumlah)}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setHapusTotalItem(null)}
+                className="px-4 py-2 text-[#6B665E] hover:bg-[#F2EDE4] rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmHapusTotal}
+                className="px-4 py-2 bg-rose-700 hover:bg-rose-800 text-white rounded-xl text-xs font-semibold shadow-xs cursor-pointer transition active:scale-95 flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Total Permanen</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Save Toast */}
+      {savedToast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#065f46] text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-xs font-semibold border border-emerald-400/30 animate-pulse">
+          <CheckCircle2 className="w-4 h-4 text-emerald-300" />
+          <span>{savedToast}</span>
         </div>
       )}
     </div>

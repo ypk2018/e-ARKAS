@@ -29,7 +29,7 @@ import { DEFAULT_SCHOOL_PROFILE, MONTH_NAMES } from './data/schoolProfile';
 import { INITIAL_KERTAS_KERJA_DATA } from './data/kertasKerjaData';
 import { INITIAL_ARKAS_PERUBAHAN_DATA, initializePerubahanFromMurni } from './data/arkasPerubahanData';
 import { INITIAL_USERS } from './data/defaultUsers';
-import { generateNomorDokumen, todayISO, generateUid } from './utils/formatters';
+import { generateNomorDokumen, todayISO, generateUid, formatRp } from './utils/formatters';
 import { printArkasPerubahanWorksheet } from './utils/printDocument';
 
 export function App() {
@@ -552,6 +552,220 @@ export function App() {
     });
   };
 
+  // Simpan / verifikasi item di ARKAS Perubahan
+  const handleSavePerubahanItem = (item: ArkasPerubahanItem, monthIndex: number) => {
+    setPerubahanWorksheets((prev) => {
+      return prev.map((ws, idx) => {
+        if (idx !== monthIndex) return ws;
+        return {
+          ...ws,
+          items: ws.items.map((it) => {
+            if (it.id !== item.id) return it;
+            return {
+              ...it,
+              isSaved: true,
+              savedAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString()
+            };
+          })
+        };
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'EDIT_PERUBAHAN',
+      title: 'Menyimpan rincian belanja di ARKAS Perubahan',
+      description: `Rincian "${item.uraian}" (${MONTH_NAMES[monthIndex]}) berhasil disimpan`,
+      targetType: 'perubahan',
+      targetMonthIndex: monthIndex
+    });
+  };
+
+  // Edit rincian belanja di ARKAS Perubahan
+  const handleEditPerubahanItem = (updatedItem: ArkasPerubahanItem, monthIndex: number) => {
+    setPerubahanWorksheets((prev) => {
+      return prev.map((ws, idx) => {
+        if (idx !== monthIndex) return ws;
+        return {
+          ...ws,
+          items: ws.items.map((it) => (it.id === updatedItem.id ? updatedItem : it))
+        };
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'EDIT_PERUBAHAN',
+      title: 'Memperbarui rincian belanja di ARKAS Perubahan',
+      description: `Perubahan data "${updatedItem.uraian}" (${MONTH_NAMES[monthIndex]})`,
+      targetType: 'perubahan',
+      targetMonthIndex: monthIndex
+    });
+  };
+
+  // Hilangkan rincian belanja di ARKAS Perubahan
+  const handleHilangkanPerubahanItem = (
+    item: ArkasPerubahanItem,
+    monthIndex: number,
+    reason?: string
+  ) => {
+    const isItemBaru = item.statusPerubahan === 'BARU';
+
+    setPerubahanWorksheets((prev) => {
+      return prev.map((ws, idx) => {
+        if (idx !== monthIndex) return ws;
+        if (isItemBaru) {
+          return {
+            ...ws,
+            items: ws.items.filter((it) => it.id !== item.id)
+          };
+        }
+        return {
+          ...ws,
+          items: ws.items.map((it) => {
+            if (it.id !== item.id) return it;
+            return {
+              ...it,
+              volume: 0,
+              jumlah: 0,
+              selisihJumlah: -it.semulaJumlah,
+              selisihVolume: -it.semulaVolume,
+              statusPerubahan: 'DIHILANGKAN' as const,
+              alasanPerubahan: reason || 'Dihilangkan / ditiadakan dalam ARKAS Perubahan',
+              updatedAt: new Date().toISOString()
+            };
+          })
+        };
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'EDIT_PERUBAHAN',
+      title: 'Meniadakan belanja di ARKAS Perubahan',
+      description: `Penghilangan belanja: "${item.uraian}" (${MONTH_NAMES[monthIndex]})`,
+      targetType: 'perubahan',
+      targetMonthIndex: monthIndex
+    });
+  };
+
+  // Pindahkan rincian belanja ke bulan lain di ARKAS Perubahan
+  const handleMovePerubahanItem = (
+    item: ArkasPerubahanItem,
+    fromMonthIndex: number,
+    toMonthIndex: number,
+    reason?: string
+  ) => {
+    if (fromMonthIndex === toMonthIndex) return;
+
+    const moveReason =
+      reason ||
+      `Pergeseran bulan belanja dari ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]}`;
+
+    setPerubahanWorksheets((prev) => {
+      const isItemBaru = item.statusPerubahan === 'BARU';
+      const effectiveVolume = item.volume > 0 ? item.volume : item.semulaVolume;
+      const effectiveTarif = item.tarifHarga > 0 ? item.tarifHarga : item.semulaTarif;
+      const effectiveJumlah = effectiveVolume * effectiveTarif;
+
+      const movedItem: ArkasPerubahanItem = {
+        ...item,
+        id: generateUid(),
+        noUrut: 999,
+        semulaVolume: 0,
+        semulaSatuan: item.satuan || item.semulaSatuan,
+        semulaTarif: 0,
+        semulaJumlah: 0,
+        volume: effectiveVolume,
+        satuan: item.satuan || item.semulaSatuan,
+        tarifHarga: effectiveTarif,
+        jumlah: effectiveJumlah,
+        selisihJumlah: effectiveJumlah,
+        selisihVolume: effectiveVolume,
+        statusPerubahan: 'BARU' as const,
+        alasanPerubahan: `Pergeseran dari bulan ${MONTH_NAMES[fromMonthIndex]}: ${moveReason}`,
+        isSaved: true,
+        savedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      return prev.map((ws, idx) => {
+        if (idx === fromMonthIndex) {
+          if (isItemBaru) {
+            return {
+              ...ws,
+              items: ws.items.filter((it) => it.id !== item.id)
+            };
+          }
+          return {
+            ...ws,
+            items: ws.items.map((it) => {
+              if (it.id !== item.id) return it;
+              return {
+                ...it,
+                volume: 0,
+                jumlah: 0,
+                selisihJumlah: -it.semulaJumlah,
+                selisihVolume: -it.semulaVolume,
+                statusPerubahan: 'DIHILANGKAN' as const,
+                alasanPerubahan: `Dipindahkan ke bulan ${MONTH_NAMES[toMonthIndex]}: ${moveReason}`,
+                updatedAt: new Date().toISOString()
+              };
+            })
+          };
+        }
+
+        if (idx === toMonthIndex) {
+          return {
+            ...ws,
+            items: [...ws.items, { ...movedItem, noUrut: ws.items.length + 1 }]
+          };
+        }
+
+        return ws;
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'EDIT_PERUBAHAN',
+      title: 'Pergeseran bulan rincian belanja di ARKAS Perubahan',
+      description: `Memindahkan "${item.uraian}" (${formatRp(
+        item.jumlah || item.semulaJumlah
+      )}) dari ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]}`,
+      targetType: 'perubahan',
+      targetMonthIndex: toMonthIndex
+    });
+  };
+
+  // Hapus total rincian belanja secara permanen dari ARKAS Perubahan
+  const handleHapusTotalPerubahanItem = (item: ArkasPerubahanItem, monthIndex: number) => {
+    setPerubahanWorksheets((prev) => {
+      return prev.map((ws, idx) => {
+        if (idx !== monthIndex) return ws;
+        return {
+          ...ws,
+          items: ws.items.filter((it) => it.id !== item.id)
+        };
+      });
+    });
+
+    handleAddActivityLog({
+      actorName: currentUser?.nama || 'Bendahara',
+      actorRole: currentUser?.role || 'BENDAHARA',
+      actionType: 'DELETE_PERUBAHAN_ITEM',
+      title: 'Hapus total rincian belanja di ARKAS Perubahan',
+      description: `Rincian "${item.uraian}" dihapus total permanen dari bulan ${MONTH_NAMES[monthIndex]}`,
+      targetType: 'perubahan',
+      targetMonthIndex: monthIndex
+    });
+  };
+
   const handleExportJSON = () => {
     const backup = {
       school,
@@ -671,6 +885,12 @@ export function App() {
                 onAddActivityLog={handleAddActivityLog}
                 currentUser={currentUser}
                 onNavigateToRekapPerubahan={() => setCurrentTab('rekap-perubahan')}
+                onSaveItem={(item, mIdx) => handleSavePerubahanItem(item, mIdx)}
+                onEditItem={(item, mIdx) => handleEditPerubahanItem(item, mIdx)}
+                onHilangkanItem={(item, mIdx, reason) => handleHilangkanPerubahanItem(item, mIdx, reason)}
+                onMoveItem={(item, fromM, toM, reason) => handleMovePerubahanItem(item, fromM, toM, reason)}
+                onHapusTotalItem={(item, mIdx) => handleHapusTotalPerubahanItem(item, mIdx)}
+                onRestoreItem={(item, mIdx) => handleRestorePerubahanItem(item, mIdx)}
               />
             )}
 
@@ -686,6 +906,11 @@ export function App() {
                 onRestoreItem={(item, monthIndex) => {
                   handleRestorePerubahanItem(item, monthIndex);
                 }}
+                onSaveItem={(item, mIdx) => handleSavePerubahanItem(item, mIdx)}
+                onEditItem={(item, mIdx) => handleEditPerubahanItem(item, mIdx)}
+                onHilangkanItem={(item, mIdx, reason) => handleHilangkanPerubahanItem(item, mIdx, reason)}
+                onMoveItem={(item, fromM, toM, reason) => handleMovePerubahanItem(item, fromM, toM, reason)}
+                onHapusTotalItem={(item, mIdx) => handleHapusTotalPerubahanItem(item, mIdx)}
                 currentUser={currentUser}
               />
             )}

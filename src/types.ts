@@ -83,6 +83,8 @@ export interface ArkasPerubahanItem {
 
   statusPerubahan: PerubahanStatus;
   alasanPerubahan?: string; // Penjelasan pergeseran/perubahan/penambahan baru
+  isSaved?: boolean;
+  savedAt?: string;
 
   temaId: string;
   temaNama: string;
