@@ -664,66 +664,89 @@ export function App() {
 
     const moveReason =
       reason ||
-      `Pergeseran bulan belanja dari ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]}`;
+      `Pergeseran jadwal pelaksanaan dari bulan ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]}`;
 
     setPerubahanWorksheets((prev) => {
-      const isItemBaru = item.statusPerubahan === 'BARU';
-      const effectiveVolume = item.volume > 0 ? item.volume : item.semulaVolume;
-      const effectiveTarif = item.tarifHarga > 0 ? item.tarifHarga : item.semulaTarif;
-      const effectiveJumlah = effectiveVolume * effectiveTarif;
+      // Nilai efektif volume, satuan, tarif, dan jumlah
+      const effectiveVolume =
+        item.volume > 0
+          ? item.volume
+          : item.semulaVolume > 0
+          ? item.semulaVolume
+          : 1;
+      const effectiveSatuan = item.satuan || item.semulaSatuan || 'unit';
+      const effectiveTarif =
+        item.tarifHarga > 0
+          ? item.tarifHarga
+          : item.semulaTarif > 0
+          ? item.semulaTarif
+          : 0;
+      const effectiveJumlah =
+        item.jumlah > 0
+          ? item.jumlah
+          : item.semulaJumlah > 0
+          ? item.semulaJumlah
+          : effectiveVolume * effectiveTarif;
 
+      // Moved item: Nilai Semula (Murni) terisi sama dengan Nilai Menjadi sehingga tidak ada nilai selisih (selisih = 0)
       const movedItem: ArkasPerubahanItem = {
         ...item,
-        id: generateUid(),
-        noUrut: 999,
-        semulaVolume: 0,
-        semulaSatuan: item.satuan || item.semulaSatuan,
-        semulaTarif: 0,
-        semulaJumlah: 0,
+        id: item.id || generateUid(),
+        semulaVolume: effectiveVolume,
+        semulaSatuan: effectiveSatuan,
+        semulaTarif: effectiveTarif,
+        semulaJumlah: effectiveJumlah,
         volume: effectiveVolume,
-        satuan: item.satuan || item.semulaSatuan,
+        satuan: effectiveSatuan,
         tarifHarga: effectiveTarif,
         jumlah: effectiveJumlah,
-        selisihJumlah: effectiveJumlah,
-        selisihVolume: effectiveVolume,
-        statusPerubahan: 'BARU' as const,
-        alasanPerubahan: `Pergeseran dari bulan ${MONTH_NAMES[fromMonthIndex]}: ${moveReason}`,
+        selisihJumlah: 0,
+        selisihVolume: 0,
+        statusPerubahan: 'TETAP' as const,
+        alasanPerubahan: `Dipindahkan dari ${MONTH_NAMES[fromMonthIndex]}: ${moveReason}`,
         isSaved: true,
         savedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
       return prev.map((ws, idx) => {
+        // 1. Pada bulan asal: data LANGSUNG HILANG dari daftar (tidak ada lagi di daftar asal)
         if (idx === fromMonthIndex) {
-          if (isItemBaru) {
-            return {
-              ...ws,
-              items: ws.items.filter((it) => it.id !== item.id)
-            };
-          }
           return {
             ...ws,
-            items: ws.items.map((it) => {
-              if (it.id !== item.id) return it;
-              return {
-                ...it,
-                volume: 0,
-                jumlah: 0,
-                selisihJumlah: -it.semulaJumlah,
-                selisihVolume: -it.semulaVolume,
-                statusPerubahan: 'DIHILANGKAN' as const,
-                alasanPerubahan: `Dipindahkan ke bulan ${MONTH_NAMES[toMonthIndex]}: ${moveReason}`,
-                updatedAt: new Date().toISOString()
-              };
-            })
+            items: ws.items.filter((it) => it.id !== item.id)
           };
         }
 
+        // 2. Pada bulan tujuan: ditambahkan dan dipastikan TIDAK ADA PENDOBLAN
         if (idx === toMonthIndex) {
-          return {
-            ...ws,
-            items: [...ws.items, { ...movedItem, noUrut: ws.items.length + 1 }]
-          };
+          const existingIndex = ws.items.findIndex(
+            (it) =>
+              it.id === item.id ||
+              (it.kodeRekening.trim() === item.kodeRekening.trim() &&
+                it.uraian.trim().toLowerCase() === item.uraian.trim().toLowerCase())
+          );
+
+          if (existingIndex >= 0) {
+            // Sudah ada di bulan tujuan: perbarui data tanpa mendobelkan baris
+            const updatedItems = [...ws.items];
+            updatedItems[existingIndex] = {
+              ...updatedItems[existingIndex],
+              ...movedItem,
+              id: updatedItems[existingIndex].id,
+              noUrut: updatedItems[existingIndex].noUrut
+            };
+            return {
+              ...ws,
+              items: updatedItems
+            };
+          } else {
+            // Belum ada: tambahkan ke daftar bulan tujuan
+            return {
+              ...ws,
+              items: [...ws.items, { ...movedItem, noUrut: ws.items.length + 1 }]
+            };
+          }
         }
 
         return ws;
@@ -737,7 +760,7 @@ export function App() {
       title: 'Pergeseran bulan rincian belanja di ARKAS Perubahan',
       description: `Memindahkan "${item.uraian}" (${formatRp(
         item.jumlah || item.semulaJumlah
-      )}) dari ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]}`,
+      )}) dari ${MONTH_NAMES[fromMonthIndex]} ke ${MONTH_NAMES[toMonthIndex]} tanpa selisih`,
       targetType: 'perubahan',
       targetMonthIndex: toMonthIndex
     });

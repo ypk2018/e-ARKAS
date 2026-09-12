@@ -41,7 +41,7 @@ import {
   PerubahanStatus,
   MonthWorksheet
 } from '../types';
-import { formatRp, formatTanggalIndo, generateUid } from '../utils/formatters';
+import { formatRp, formatTanggalIndo, generateUid, terbilang } from '../utils/formatters';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST } from '../data/standarData';
 import { MONTH_NAMES } from '../data/schoolProfile';
 import { printArkasPerubahanWorksheet } from '../utils/printDocument';
@@ -186,10 +186,78 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   }, [currentWs]);
 
   const totalMenjadiBulan = useMemo(() => {
-    return currentWs.items.reduce((s, it) => s + it.jumlah, 0);
+    return currentWs.items.reduce(
+      (s, it) => s + (it.statusPerubahan === 'DIHILANGKAN' ? 0 : it.jumlah),
+      0
+    );
   }, [currentWs]);
 
   const selisihBulan = totalMenjadiBulan - totalSemulaBulan;
+
+  // Triwulan metrics
+  const twIndex = Math.floor(selectedMonth / 3);
+  const twName = ['I', 'II', 'III', 'IV'][twIndex];
+  const twMonthIndices = [twIndex * 3, twIndex * 3 + 1, twIndex * 3 + 2];
+
+  const totalSemulaTW = useMemo(() => {
+    return twMonthIndices.reduce((s, m) => {
+      const ws = worksheets[m];
+      return s + (ws ? ws.items.reduce((acc, it) => acc + it.semulaJumlah, 0) : 0);
+    }, 0);
+  }, [worksheets, twIndex]);
+
+  const totalMenjadiTW = useMemo(() => {
+    return twMonthIndices.reduce((s, m) => {
+      const ws = worksheets[m];
+      return (
+        s +
+        (ws
+          ? ws.items.reduce(
+              (acc, it) =>
+                acc + (it.statusPerubahan === 'DIHILANGKAN' ? 0 : it.jumlah),
+              0
+            )
+          : 0)
+      );
+    }, 0);
+  }, [worksheets, twIndex]);
+
+  const selisihTW = totalMenjadiTW - totalSemulaTW;
+
+  // 1 Tahun (12 Bulan) metrics
+  const totalSemulaTahun = useMemo(() => {
+    return worksheets.reduce(
+      (s, ws) => s + ws.items.reduce((acc, it) => acc + it.semulaJumlah, 0),
+      0
+    );
+  }, [worksheets]);
+
+  const totalMenjadiTahun = useMemo(() => {
+    return worksheets.reduce(
+      (s, ws) =>
+        s +
+        ws.items.reduce(
+          (acc, it) =>
+            acc + (it.statusPerubahan === 'DIHILANGKAN' ? 0 : it.jumlah),
+          0
+        ),
+      0
+    );
+  }, [worksheets]);
+
+  const selisihTahun = totalMenjadiTahun - totalSemulaTahun;
+
+  const totalDihilangkanBulan = useMemo(() => {
+    return currentWs.items
+      .filter((it) => it.statusPerubahan === 'DIHILANGKAN')
+      .reduce((s, it) => s + it.semulaJumlah, 0);
+  }, [currentWs]);
+
+  const totalBaruBulan = useMemo(() => {
+    return currentWs.items
+      .filter((it) => it.statusPerubahan === 'BARU')
+      .reduce((s, it) => s + it.jumlah, 0);
+  }, [currentWs]);
 
   // Counts by status
   const counts = useMemo(() => {
@@ -542,7 +610,7 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   };
 
   const handlePrint = () => {
-    printArkasPerubahanWorksheet(currentWs, selectedMonth, school);
+    printArkasPerubahanWorksheet(currentWs, selectedMonth, school, worksheets);
   };
 
   return (
@@ -676,85 +744,152 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
       </div>
 
       {/* Comparative Summary Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Semula */}
-        <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E]">
-            ANGGARAN SEMULA (ARKAS MURNI)
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Semula */}
+          <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E]">
+              ANGGARAN SEMULA (ARKAS MURNI)
+            </div>
+            <div className="text-lg font-serif font-bold text-[#2C2A28] mt-1">
+              {formatRp(totalSemulaBulan)}
+            </div>
+            <div className="text-[11px] text-[#6B665E] mt-0.5">
+              Pagu awal bulan {MONTH_NAMES[selectedMonth]}
+            </div>
           </div>
-          <div className="text-lg font-serif font-bold text-[#2C2A28] mt-1">
-            {formatRp(totalSemulaBulan)}
-          </div>
-          <div className="text-[11px] text-[#6B665E] mt-0.5">
-            Pagu awal bulan {MONTH_NAMES[selectedMonth]}
-          </div>
-        </div>
 
-        {/* Menjadi */}
-        <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-[#059669]">
-            ANGGARAN MENJADI (PERUBAHAN)
+          {/* Menjadi */}
+          <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[#059669]">
+              ANGGARAN MENJADI (PERUBAHAN)
+            </div>
+            <div className="text-lg font-serif font-bold text-[#059669] mt-1">
+              {formatRp(totalMenjadiBulan)}
+            </div>
+            <div className="text-[11px] text-[#6B665E] mt-0.5">
+              Total realokasi bulan {MONTH_NAMES[selectedMonth]}
+            </div>
           </div>
-          <div className="text-lg font-serif font-bold text-[#059669] mt-1">
-            {formatRp(totalMenjadiBulan)}
-          </div>
-          <div className="text-[11px] text-[#6B665E] mt-0.5">
-            Total realokasi bulan {MONTH_NAMES[selectedMonth]}
-          </div>
-        </div>
 
-        {/* Selisih */}
-        <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E] flex items-center justify-between">
-            <span>SELISIH / PERGESERAN NET</span>
-            {selisihBulan > 0 ? (
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-            ) : selisihBulan < 0 ? (
-              <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
-            ) : null}
-          </div>
-          <div
-            className={`text-lg font-serif font-bold mt-1 ${
-              selisihBulan > 0
-                ? 'text-emerald-700'
+          {/* Selisih */}
+          <div className="bg-white p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E] flex items-center justify-between">
+              <span>SELISIH / PERGESERAN NET</span>
+              {selisihBulan > 0 ? (
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+              ) : selisihBulan < 0 ? (
+                <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
+              ) : null}
+            </div>
+            <div
+              className={`text-lg font-serif font-bold mt-1 ${
+                selisihBulan > 0
+                  ? 'text-emerald-700'
+                  : selisihBulan < 0
+                  ? 'text-rose-700'
+                  : 'text-[#5C5852]'
+              }`}
+            >
+              {selisihBulan > 0 ? '+' : ''}
+              {formatRp(selisihBulan)}
+            </div>
+            <div className="text-[11px] text-[#6B665E] mt-0.5">
+              {selisihBulan > 0
+                ? 'Bertambah dari pagu awal'
                 : selisihBulan < 0
-                ? 'text-rose-700'
-                : 'text-[#5C5852]'
-            }`}
-          >
-            {selisihBulan > 0 ? '+' : ''}
-            {formatRp(selisihBulan)}
+                ? 'Berkurang dari pagu awal'
+                : 'Tidak ada pergeseran total nominal'}
+            </div>
           </div>
-          <div className="text-[11px] text-[#6B665E] mt-0.5">
-            {selisihBulan > 0
-              ? 'Bertambah dari pagu awal'
-              : selisihBulan < 0
-              ? 'Berkurang dari pagu awal'
-              : 'Tidak ada perubahan total nominal'}
+
+          {/* Rekap Item Perubahan */}
+          <div className="bg-[#F9F7F2] p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs flex flex-col justify-center">
+            <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E] mb-1.5">
+              STATUS PERUBAHAN BULAN INI
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
+                {counts.baru} Baru
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
+                {counts.bertambah} Tambah
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
+                {counts.berkurang} Kurang
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold">
+                {counts.dihilangkan} Dihilangkan
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                {counts.tetap} Tetap
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Rekap Item Perubahan */}
-        <div className="bg-[#F9F7F2] p-5 rounded-[22px] border border-[#E0DACE] shadow-2xs flex flex-col justify-center">
-          <div className="text-[10px] uppercase font-bold tracking-wider text-[#8C867E] mb-1.5">
-            STATUS PERUBAHAN BULAN INI
+        {/* Secondary Summary: Triwulan & Tahunan */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-[#EFF6FF] px-4 py-3 rounded-2xl border border-blue-200 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+                Total Triwulan {twName}
+              </div>
+              <div className="text-sm font-mono font-bold text-blue-900 mt-0.5">
+                {formatRp(totalMenjadiTW)}
+              </div>
+            </div>
+            <div className="text-right text-[10px] text-blue-600 font-mono">
+              <div>Semula: {formatRp(totalSemulaTW)}</div>
+              <div className={selisihTW >= 0 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                {selisihTW > 0 ? '+' : ''}{formatRp(selisihTW)}
+              </div>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-            <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold">
-              {counts.baru} Baru
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">
-              {counts.bertambah} Tambah
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold">
-              {counts.berkurang} Kurang
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 font-bold">
-              {counts.dihilangkan} Dihilangkan
-            </span>
-            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
-              {counts.tetap} Tetap
-            </span>
+
+          <div className="bg-[#FAF5FF] px-4 py-3 rounded-2xl border border-purple-200 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wider">
+                Total Akumulasi 1 Tahun
+              </div>
+              <div className="text-sm font-mono font-bold text-purple-900 mt-0.5">
+                {formatRp(totalMenjadiTahun)}
+              </div>
+            </div>
+            <div className="text-right text-[10px] text-purple-600 font-mono">
+              <div>Semula: {formatRp(totalSemulaTahun)}</div>
+              <div className={selisihTahun >= 0 ? 'text-emerald-700 font-bold' : 'text-rose-700 font-bold'}>
+                {selisihTahun > 0 ? '+' : ''}{formatRp(selisihTahun)}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[#FFF1F2] px-4 py-3 rounded-2xl border border-rose-200 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">
+                Belanja Dihilangkan ({counts.dihilangkan} Item)
+              </div>
+              <div className="text-sm font-mono font-bold text-rose-900 mt-0.5">
+                {formatRp(totalDihilangkanBulan)}
+              </div>
+            </div>
+            <div className="text-right text-[10px] text-rose-600">
+              Bulan {MONTH_NAMES[selectedMonth]}
+            </div>
+          </div>
+
+          <div className="bg-[#F0FDF4] px-4 py-3 rounded-2xl border border-emerald-200 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">
+                Belanja Baru ({counts.baru} Item)
+              </div>
+              <div className="text-sm font-mono font-bold text-emerald-900 mt-0.5">
+                {formatRp(totalBaruBulan)}
+              </div>
+            </div>
+            <div className="text-right text-[10px] text-emerald-600">
+              Bulan {MONTH_NAMES[selectedMonth]}
+            </div>
           </div>
         </div>
       </div>
@@ -1201,18 +1336,19 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
               )}
             </tbody>
             <tfoot>
+              {/* Baris 1: Total Bulan Ini */}
               <tr className="bg-[#F2EDE4] font-bold text-[#2C2A28] border-t-2 border-[#E0DACE]">
-                <td colSpan={4} className="py-3 px-4 text-right font-serif">
-                  TOTAL REALOKASI BULAN {MONTH_NAMES[selectedMonth].toUpperCase()} :
+                <td colSpan={4} className="py-2.5 px-4 text-right font-serif text-xs">
+                  1. TOTAL ANGGARAN BULAN {MONTH_NAMES[selectedMonth].toUpperCase()} :
                 </td>
-                <td className="py-3 px-3 text-right font-mono bg-[#FAF8F4]">
+                <td className="py-2.5 px-3 text-right font-mono bg-[#FAF8F4] text-xs">
                   {formatRp(totalSemulaBulan)}
                 </td>
-                <td className="py-3 px-3 text-right font-mono bg-[#EFF5ED]">
+                <td className="py-2.5 px-3 text-right font-mono bg-[#EFF5ED] text-xs text-emerald-900">
                   {formatRp(totalMenjadiBulan)}
                 </td>
                 <td
-                  className={`py-3 px-3 text-right font-mono ${
+                  className={`py-2.5 px-3 text-right font-mono text-xs ${
                     selisihBulan > 0
                       ? 'text-emerald-700'
                       : selisihBulan < 0
@@ -1223,7 +1359,65 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                   {selisihBulan > 0 ? '+' : ''}
                   {formatRp(selisihBulan)}
                 </td>
-                <td colSpan={2}></td>
+                <td colSpan={2} className="text-[11px] text-[#6B665E] italic">
+                  {currentWs.items.length} Rincian Kegiatan
+                </td>
+              </tr>
+
+              {/* Baris 2: Total Triwulan */}
+              <tr className="bg-[#EFF6FF] font-bold text-blue-950 border-t border-blue-200">
+                <td colSpan={4} className="py-2.5 px-4 text-right font-serif text-xs">
+                  2. TOTAL KUMULATIF TRIWULAN {twName} ({school.tahunAnggaran}) :
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono bg-blue-50/50 text-xs">
+                  {formatRp(totalSemulaTW)}
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono bg-blue-100/50 text-xs text-blue-900">
+                  {formatRp(totalMenjadiTW)}
+                </td>
+                <td
+                  className={`py-2.5 px-3 text-right font-mono text-xs ${
+                    selisihTW >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {selisihTW > 0 ? '+' : ''}
+                  {formatRp(selisihTW)}
+                </td>
+                <td colSpan={2} className="text-[11px] text-blue-700 italic">
+                  Akumulasi Triwulan {twName}
+                </td>
+              </tr>
+
+              {/* Baris 3: Total 1 Tahun Anggaran */}
+              <tr className="bg-[#FAF5FF] font-bold text-purple-950 border-t border-purple-200">
+                <td colSpan={4} className="py-2.5 px-4 text-right font-serif text-xs">
+                  3. TOTAL AKUMULASI 1 TAHUN (12 BULAN) :
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono bg-purple-50/50 text-xs">
+                  {formatRp(totalSemulaTahun)}
+                </td>
+                <td className="py-2.5 px-3 text-right font-mono bg-purple-100/50 text-xs text-purple-900">
+                  {formatRp(totalMenjadiTahun)}
+                </td>
+                <td
+                  className={`py-2.5 px-3 text-right font-mono text-xs ${
+                    selisihTahun >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                  }`}
+                >
+                  {selisihTahun > 0 ? '+' : ''}
+                  {formatRp(selisihTahun)}
+                </td>
+                <td colSpan={2} className="text-[11px] text-purple-700 italic">
+                  Tahun Anggaran {school.tahunAnggaran}
+                </td>
+              </tr>
+
+              {/* Baris 4: Terbilang */}
+              <tr className="bg-white border-t border-[#E0DACE]">
+                <td colSpan={9} className="py-2.5 px-4 text-xs italic text-[#4A463F]">
+                  <span className="font-semibold text-[#2C2A28] not-italic">Terbilang Anggaran Menjadi Bulan Ini:</span>{' '}
+                  &ldquo; {terbilang(totalMenjadiBulan)} Rupiah &rdquo;
+                </td>
               </tr>
             </tfoot>
           </table>
