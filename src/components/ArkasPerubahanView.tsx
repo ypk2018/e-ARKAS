@@ -654,7 +654,11 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   };
 
   const handlePrint = () => {
-    printArkasPerubahanWorksheet(currentWs, selectedMonth, school, worksheets);
+    if (onPrintMonth) {
+      onPrintMonth(selectedMonth);
+    } else {
+      printArkasPerubahanWorksheet(currentWs, selectedMonth, school, worksheets);
+    }
   };
 
   return (

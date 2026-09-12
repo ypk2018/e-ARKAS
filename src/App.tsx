@@ -208,8 +208,10 @@ export function App() {
   // Print modal state
   const [printModal, setPrintModal] = useState<{
     isOpen: boolean;
-    mode: 'worksheet' | 'document';
+    mode: 'worksheet' | 'document' | 'arkas-perubahan';
     worksheet?: MonthWorksheet;
+    perubahanWorksheet?: ArkasPerubahanMonthWorksheet;
+    allPerubahanWorksheets?: ArkasPerubahanMonthWorksheet[];
     document?: SpjDocument;
     monthIndex?: number;
   }>({
@@ -502,7 +504,13 @@ export function App() {
   const handlePrintPerubahanWorksheet = (monthIndex: number) => {
     const ws = perubahanWorksheets[monthIndex];
     if (ws) {
-      printArkasPerubahanWorksheet(ws, monthIndex, school);
+      setPrintModal({
+        isOpen: true,
+        mode: 'arkas-perubahan',
+        perubahanWorksheet: ws,
+        allPerubahanWorksheets: perubahanWorksheets,
+        monthIndex
+      });
     }
   };
 
@@ -1000,6 +1008,8 @@ export function App() {
         <PrintModal
           mode={printModal.mode}
           worksheet={printModal.worksheet}
+          perubahanWorksheet={printModal.perubahanWorksheet}
+          allPerubahanWorksheets={printModal.allPerubahanWorksheets}
           document={printModal.document}
           school={school}
           monthIndex={printModal.monthIndex}

@@ -4,12 +4,19 @@ import { MONTH_NAMES } from '../data/schoolProfile';
 import { TEMA_STANDAR_LIST } from '../data/standarData';
 
 /**
- * Builds standard print CSS styling for A4 documents
+ * Builds standard print CSS styling for A4 documents (supports portrait or landscape)
  */
-const getPrintStyles = (): string => `
+const getPrintStyles = (
+  orientation: 'portrait' | 'landscape' = 'portrait',
+  customMargin?: string
+): string => {
+  const pageMargin = customMargin || (orientation === 'landscape' ? '6mm 8mm 7mm 8mm' : '10mm 12mm 10mm 12mm');
+  const maxWidth = orientation === 'landscape' ? '281mm' : '190mm';
+
+  return `
   @page {
-    size: A4 portrait;
-    margin: 12mm 14mm 12mm 14mm;
+    size: A4 ${orientation};
+    margin: ${pageMargin};
   }
   
   *, *::before, *::after {
@@ -22,8 +29,8 @@ const getPrintStyles = (): string => `
 
   body {
     font-family: 'Times New Roman', Times, 'Newsreader', Georgia, serif;
-    font-size: 11pt;
-    line-height: 1.35;
+    font-size: 10.5pt;
+    line-height: 1.3;
     color: #1a1a1a;
     background: #ffffff;
     padding: 0;
@@ -32,7 +39,7 @@ const getPrintStyles = (): string => `
 
   .page-container {
     width: 100%;
-    max-width: 190mm;
+    max-width: ${maxWidth};
     margin: 0 auto;
     position: relative;
     overflow: visible;
@@ -403,6 +410,7 @@ const getPrintStyles = (): string => `
     }
   }
 `;
+};
 
 /**
  * Builds HTML for a single SPJ document page
@@ -1014,11 +1022,7 @@ export function buildRekapMatrixPrintHtml(
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>REKAP_MATRIKS_8_STANDAR_${school.tahunAnggaran}</title>
         <style>
-          ${getPrintStyles()}
-          @page {
-            size: A4 landscape;
-            margin: 8mm 10mm;
-          }
+          ${getPrintStyles('landscape', '8mm 10mm 8mm 10mm')}
           .rekap-table {
             width: 100%;
             border-collapse: collapse;
@@ -1270,15 +1274,26 @@ export function printWorksheet(
   }
 }
 
+export interface ArkasPerubahanPrintOptions {
+  orientation?: 'landscape' | 'portrait';
+  scale?: number; // e.g. 0.8 to 1.0 (default 1.0 or 0.95)
+  showKpi?: boolean;
+}
+
 /**
  * Builds HTML for ARKAS PERUBAHAN comparative printout (Semula vs Menjadi & Selisih)
+ * Carefully calibrated to ensure zero cutoff horizontally and vertically.
  */
 export function buildArkasPerubahanPrintHtml(
   worksheet: ArkasPerubahanMonthWorksheet,
   monthIndex: number,
   school: SchoolProfile,
-  allWorksheets?: ArkasPerubahanMonthWorksheet[]
+  allWorksheets?: ArkasPerubahanMonthWorksheet[],
+  options?: ArkasPerubahanPrintOptions
 ): string {
+  const orientation = options?.orientation || 'landscape';
+  const scale = options?.scale || 1.0;
+  const showKpi = options?.showKpi !== false;
   const monthName = MONTH_NAMES[monthIndex] || 'Bulan';
   const totalSemula = worksheet.items.reduce((s, it) => s + it.semulaJumlah, 0);
   const totalMenjadi = worksheet.items.reduce(
@@ -1352,17 +1367,20 @@ export function buildArkasPerubahanPrintHtml(
   const getStatusBadge = (st: string) => {
     switch (st) {
       case 'BARU':
-        return '<span style="background-color: #d1fae5; color: #065f46; font-weight: bold; padding: 1pt 3pt; font-size: 6.5pt; border-radius: 2pt;">BARU</span>';
+        return '<span class="perub-badge" style="background-color: #dcfce7; color: #15803d; border: 0.5pt solid #86efac;">+ BARU</span>';
       case 'DIHILANGKAN':
-        return '<span style="background-color: #fee2e2; color: #991b1b; font-weight: bold; padding: 1pt 3pt; font-size: 6.5pt; border-radius: 2pt;">DIHILANGKAN</span>';
+        return '<span class="perub-badge" style="background-color: #fee2e2; color: #b91c1c; border: 0.5pt solid #fca5a5;">&times; HAPUS</span>';
       case 'BERTAMBAH':
-        return '<span style="background-color: #dbeafe; color: #1e40af; font-weight: bold; padding: 1pt 3pt; font-size: 6.5pt; border-radius: 2pt;">BERTAMBAH</span>';
+        return '<span class="perub-badge" style="background-color: #dbeafe; color: #1d4ed8; border: 0.5pt solid #93c5fd;">&uarr; NAIK</span>';
       case 'BERKURANG':
-        return '<span style="background-color: #fef3c7; color: #92400e; font-weight: bold; padding: 1pt 3pt; font-size: 6.5pt; border-radius: 2pt;">BERKURANG</span>';
+        return '<span class="perub-badge" style="background-color: #fef3c7; color: #b45309; border: 0.5pt solid #fde68a;">&darr; TURUN</span>';
       default:
-        return '<span style="background-color: #f3f4f6; color: #4b5563; padding: 1pt 3pt; font-size: 6.5pt; border-radius: 2pt;">TETAP</span>';
+        return '<span class="perub-badge" style="background-color: #f3f4f6; color: #4b5563; border: 0.5pt solid #d1d5db;">TETAP</span>';
     }
   };
+
+  const marginSetting = orientation === 'landscape' ? '6mm 8mm 7mm 8mm' : '8mm 10mm 8mm 10mm';
+  const containerMaxWidth = orientation === 'landscape' ? '281mm' : '190mm';
 
   return `
     <!DOCTYPE html>
@@ -1372,54 +1390,80 @@ export function buildArkasPerubahanPrintHtml(
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>ARKAS_PERUBAHAN_${monthName.toUpperCase()}_${school.tahunAnggaran}</title>
         <style>
-          ${getPrintStyles()}
+          ${getPrintStyles(orientation, marginSetting)}
           @page {
-            size: A4 landscape;
-            margin: 6mm 7mm;
+            size: A4 ${orientation};
+            margin: ${marginSetting};
+          }
+          @media print {
+            @page {
+              size: ${orientation};
+              margin: ${marginSetting};
+            }
+            html, body {
+              width: 100% !important;
+              height: auto !important;
+              overflow: visible !important;
+              background: #ffffff !important;
+              ${scale < 1 ? `zoom: ${scale};` : ''}
+            }
+            .page-container {
+              max-width: 100% !important;
+              width: 100% !important;
+              height: auto !important;
+              overflow: visible !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
           }
           html, body {
-            width: 100% !important;
-            height: auto !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            overflow: visible !important;
-            background: #ffffff !important;
+            width: 100%;
+            height: auto;
+            margin: 0;
+            padding: 0;
+            overflow: visible;
+            background: #ffffff;
+            color: #1a1a1a;
+            ${scale < 1 ? `zoom: ${scale};` : ''}
           }
           .page-container {
-            max-width: 100% !important;
-            width: 100% !important;
-            height: auto !important;
-            overflow: visible !important;
-            margin: 0 auto !important;
-            padding: 0 !important;
+            max-width: ${containerMaxWidth};
+            width: 100%;
+            height: auto;
+            overflow: visible;
+            margin: 0 auto;
+            padding: 0;
           }
           .kpi-row {
             display: flex;
-            gap: 6pt;
-            margin-bottom: 6pt;
+            gap: 4pt;
+            margin-bottom: 4pt;
           }
           .kpi-card {
             flex: 1;
-            border: 0.75pt solid #cbd5e1;
-            padding: 3pt 5pt;
-            border-radius: 3pt;
+            border: 0.5pt solid #cbd5e1;
+            padding: 2.5pt 4pt;
+            border-radius: 2pt;
             text-align: center;
           }
           .kpi-title {
-            font-size: 6pt;
+            font-size: 5.5pt;
             font-weight: bold;
             text-transform: uppercase;
           }
           .kpi-value {
-            font-size: 8.5pt;
+            font-size: 7.5pt;
             font-weight: bold;
             font-family: monospace;
             margin-top: 1pt;
           }
-          .perub-table {
+          table.perub-table {
             width: 100% !important;
+            max-width: 100% !important;
+            table-layout: fixed !important;
             border-collapse: collapse !important;
-            font-size: 7pt !important;
+            font-size: 6.8pt !important;
+            line-height: 1.25 !important;
             margin-top: 4pt;
             page-break-inside: auto !important;
           }
@@ -1427,7 +1471,9 @@ export function buildArkasPerubahanPrintHtml(
             display: table-header-group !important;
           }
           .perub-table tfoot {
-            display: table-footer-group !important;
+            display: table-row-group !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
           .perub-table tr {
             page-break-inside: avoid !important;
@@ -1438,13 +1484,45 @@ export function buildArkasPerubahanPrintHtml(
             background-color: #f4efe6;
             font-weight: bold;
             text-align: center;
-            padding: 3pt 1.5pt;
+            padding: 2.5pt 1.5pt;
+            font-size: 6.5pt;
+            line-height: 1.2;
+            box-sizing: border-box;
           }
           .perub-table td {
             border: 0.5pt solid #c8c2b5;
-            padding: 2.5pt 2pt;
+            padding: 2.2pt 2pt;
             vertical-align: middle;
-            word-break: break-word;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
+            white-space: normal !important;
+            box-sizing: border-box;
+          }
+          .perub-table td.num {
+            text-align: right;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 6.5pt;
+            white-space: nowrap !important;
+            padding: 2.2pt 2pt;
+          }
+          .perub-table td.center {
+            text-align: center;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 6.5pt;
+          }
+          .perub-badge {
+            display: inline-block;
+            padding: 0.5pt 2.5pt;
+            border-radius: 2pt;
+            font-size: 5.5pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            white-space: nowrap;
+          }
+          .closing-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-top: 6pt;
           }
         </style>
       </head>
@@ -1454,7 +1532,7 @@ export function buildArkasPerubahanPrintHtml(
             <img src="/logo_smpn7.png" alt="" />
           </div>
 
-          <div class="header-kop" style="margin-bottom: 6pt; padding-bottom: 4pt;">
+          <div class="header-kop" style="margin-bottom: 4pt; padding-bottom: 3pt;">
             <div class="logo-container">
               <img src="/logo_smpn7.png" alt="Logo SMP Negeri 7 Sentani" />
             </div>
@@ -1465,11 +1543,14 @@ export function buildArkasPerubahanPrintHtml(
             </div>
           </div>
 
-          <div class="doc-title-container" style="margin-bottom: 4pt;">
-            <div class="doc-title" style="font-size: 10.5pt;">KERTAS KERJA PERUBAHAN ANGGARAN (ARKAS PERUBAHAN)</div>
-            <div class="doc-number" style="font-size: 8pt;">Bulan ${monthName.toUpperCase()} ${school.tahunAnggaran} &bull; Sumber Dana: <b>${school.sumberDana}</b> &bull; Dokumen Resmi Perubahan Rencana Kerja dan Anggaran Sekolah</div>
+          <div class="doc-title-container" style="margin-bottom: 3pt;">
+            <div class="doc-title" style="font-size: 9.5pt; letter-spacing: 0.5pt;">KERTAS KERJA PERUBAHAN ANGGARAN (ARKAS PERUBAHAN)</div>
+            <div class="doc-number" style="font-size: 7.5pt; color: #333;">
+              Bulan ${monthName.toUpperCase()} ${school.tahunAnggaran} &bull; Sumber Dana: <b>${school.sumberDana}</b> &bull; Dokumen Resmi Perubahan Rencana Kerja dan Anggaran Sekolah
+            </div>
           </div>
 
+          ${showKpi ? `
           <!-- KPI Summary Header in Print -->
           <div class="kpi-row">
             <div class="kpi-card" style="background-color: #f8fafc;">
@@ -1495,128 +1576,146 @@ export function buildArkasPerubahanPrintHtml(
               <div class="kpi-value" style="color: #581c87;">${formatRp(totalMenjadiTahun)}</div>
             </div>
           </div>
+          ` : ''}
 
           <table class="perub-table">
+            <colgroup>
+              <col style="width: 3.2%;" />
+              <col style="width: 10.5%;" />
+              <col style="width: 5.5%;" />
+              <col style="width: 25.5%;" />
+              <col style="width: 6.8%;" />
+              <col style="width: 3.5%;" />
+              <col style="width: 6.5%;" />
+              <col style="width: 7.5%;" />
+              <col style="width: 3.5%;" />
+              <col style="width: 6.5%;" />
+              <col style="width: 7.5%;" />
+              <col style="width: 7.0%;" />
+              <col style="width: 6.5%;" />
+            </colgroup>
             <thead>
               <tr>
-                <th rowspan="2" style="width: 18pt;">No</th>
-                <th rowspan="2" style="width: 55pt;">Kode Rekening</th>
-                <th rowspan="2" style="width: 40pt;">Kode Prog</th>
+                <th rowspan="2">No</th>
+                <th rowspan="2">Kode Rekening</th>
+                <th rowspan="2">Kode Prog</th>
                 <th rowspan="2">Uraian Rincian Belanja / Kegiatan</th>
-                <th rowspan="2" style="width: 50pt;">Status</th>
-                <th colspan="3" style="background-color: #f9f8f5;">SEMULA (ARKAS MURNI)</th>
-                <th colspan="3" style="background-color: #eef2eb;">MENJADI (ARKAS PERUBAHAN)</th>
-                <th rowspan="2" style="width: 58pt;">SELISIH (+/-)</th>
-                <th rowspan="2" style="width: 80pt;">Alasan / Keterangan</th>
+                <th rowspan="2">Status</th>
+                <th colspan="3" style="background-color: #f7f5f0; border-bottom: 0.5pt solid #1a1a1a;">SEMULA (ARKAS MURNI)</th>
+                <th colspan="3" style="background-color: #ecf3e8; border-bottom: 0.5pt solid #1a1a1a;">MENJADI (ARKAS PERUBAHAN)</th>
+                <th rowspan="2">SELISIH (+/-)</th>
+                <th rowspan="2">Alasan / Ket</th>
               </tr>
               <tr>
-                <th style="width: 20pt;">Vol</th>
-                <th style="width: 32pt;">Tarif</th>
-                <th style="width: 48pt;">Jumlah</th>
-                <th style="width: 20pt;">Vol</th>
-                <th style="width: 32pt;">Tarif</th>
-                <th style="width: 48pt;">Jumlah</th>
+                <th>Vol</th>
+                <th>Tarif (Rp)</th>
+                <th>Jumlah (Rp)</th>
+                <th>Vol</th>
+                <th>Tarif (Rp)</th>
+                <th>Jumlah (Rp)</th>
               </tr>
             </thead>
             <tbody>
               ${worksheet.items.map((it, idx) => {
                 const isDihilangkan = it.statusPerubahan === 'DIHILANGKAN';
                 return `
-                  <tr style="${isDihilangkan ? 'background-color: #fff1f2; text-decoration: line-through; color: #888;' : ''}">
-                    <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-                    <td style="font-family: monospace; font-size: 6.8pt;">${it.kodeRekening || '-'}</td>
-                    <td style="font-family: monospace; text-align: center; font-size: 6.8pt;">${it.kodeProgram || '-'}</td>
+                  <tr style="${isDihilangkan ? 'background-color: #fff1f2; color: #7f1d1d;' : ''}">
+                    <td style="text-align: center; font-weight: bold; font-size: 6.5pt;">${idx + 1}</td>
+                    <td class="center" style="text-align: left; font-size: 6.2pt;">${it.kodeRekening || '-'}</td>
+                    <td class="center" style="font-size: 6.2pt;">${it.kodeProgram || '-'}</td>
                     <td>
-                      <div style="font-weight: 600;">${it.uraian}</div>
-                      <div style="font-size: 6.2pt; color: #555;">[Standar ${it.temaId} - ${it.subtemaNama || ''}]</div>
+                      <div style="font-weight: 600; font-size: 6.8pt; line-height: 1.2; ${isDihilangkan ? 'text-decoration: line-through;' : ''}">${it.uraian}</div>
+                      <div style="font-size: 5.6pt; color: #555; line-height: 1.15; margin-top: 1pt;">[Standar ${it.temaId} &bull; ${it.subtemaNama || ''}]</div>
                     </td>
                     <td style="text-align: center;">${getStatusBadge(it.statusPerubahan)}</td>
                     
                     <!-- Semula -->
-                    <td style="text-align: center; font-family: monospace;">${it.semulaVolume}</td>
-                    <td style="text-align: right; font-family: monospace;">${it.semulaTarif > 0 ? formatRp(it.semulaTarif).replace('Rp ', '') : '-'}</td>
-                    <td style="text-align: right; font-family: monospace;">${formatRp(it.semulaJumlah).replace('Rp ', '')}</td>
+                    <td class="center">${it.semulaVolume}</td>
+                    <td class="num">${it.semulaTarif > 0 ? formatRp(it.semulaTarif).replace('Rp ', '') : '-'}</td>
+                    <td class="num">${formatRp(it.semulaJumlah).replace('Rp ', '')}</td>
 
                     <!-- Menjadi -->
-                    <td style="text-align: center; font-family: monospace; font-weight: bold;">${it.volume}</td>
-                    <td style="text-align: right; font-family: monospace;">${it.tarifHarga > 0 ? formatRp(it.tarifHarga).replace('Rp ', '') : '-'}</td>
-                    <td style="text-align: right; font-family: monospace; font-weight: bold;">${formatRp(it.jumlah).replace('Rp ', '')}</td>
+                    <td class="center" style="font-weight: bold;">${it.volume}</td>
+                    <td class="num">${it.tarifHarga > 0 ? formatRp(it.tarifHarga).replace('Rp ', '') : '-'}</td>
+                    <td class="num" style="font-weight: bold;">${formatRp(it.jumlah).replace('Rp ', '')}</td>
 
                     <!-- Selisih -->
-                    <td style="text-align: right; font-family: monospace; font-weight: bold; color: ${it.selisihJumlah > 0 ? '#047857' : it.selisihJumlah < 0 ? '#b91c1c' : '#4b5563'};">
+                    <td class="num" style="font-weight: bold; color: ${it.selisihJumlah > 0 ? '#047857' : it.selisihJumlah < 0 ? '#b91c1c' : '#4b5563'};">
                       ${it.selisihJumlah > 0 ? '+' : ''}${formatRp(it.selisihJumlah).replace('Rp ', '')}
                     </td>
 
                     <!-- Alasan -->
-                    <td style="font-size: 6.2pt; color: #374151;">${it.alasanPerubahan || '-'}</td>
+                    <td style="font-size: 5.6pt; line-height: 1.15; color: #374151;">${it.alasanPerubahan || '-'}</td>
                   </tr>
                 `;
               }).join('')}
             </tbody>
             <tfoot>
               <!-- Baris 1: Total Bulan Ini -->
-              <tr style="background-color: #f2ede4; font-weight: bold; border-top: 1.5pt solid #1a1a1a;">
-                <td colspan="7" style="text-align: right; padding-right: 4pt;">1. TOTAL ANGGARAN BULAN ${monthName.toUpperCase()}:</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalSemula)}</td>
-                <td colspan="2" style="text-align: right; padding-right: 4pt;">MENJADI:</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalMenjadi)}</td>
-                <td style="text-align: right; font-family: monospace; color: ${totalSelisih >= 0 ? '#047857' : '#b91c1c'};">
-                  ${totalSelisih > 0 ? '+' : ''}${formatRp(totalSelisih)}
+              <tr style="background-color: #f4efe6; font-weight: bold; border-top: 1.2pt solid #1a1a1a;">
+                <td colspan="7" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">1. TOTAL ANGGARAN BULAN ${monthName.toUpperCase()}:</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalSemula).replace('Rp ', '')}</td>
+                <td colspan="2" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">MENJADI:</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalMenjadi).replace('Rp ', '')}</td>
+                <td class="num" style="font-weight: bold; color: ${totalSelisih >= 0 ? '#047857' : '#b91c1c'};">
+                  ${totalSelisih > 0 ? '+' : ''}${formatRp(totalSelisih).replace('Rp ', '')}
                 </td>
-                <td style="font-size: 6pt; color: #555;">${worksheet.items.length} Rincian</td>
+                <td style="font-size: 5.6pt; color: #444; text-align: center;">${worksheet.items.length} Rincian</td>
               </tr>
 
               <!-- Baris 2: Total Triwulan -->
               <tr style="background-color: #eff6ff; font-weight: bold;">
-                <td colspan="7" style="text-align: right; padding-right: 4pt;">2. TOTAL KUMULATIF TRIWULAN ${twName} (${school.tahunAnggaran}):</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalSemulaTW)}</td>
-                <td colspan="2" style="text-align: right; padding-right: 4pt;">MENJADI:</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalMenjadiTW)}</td>
-                <td style="text-align: right; font-family: monospace; color: ${totalSelisihTW >= 0 ? '#047857' : '#b91c1c'};">
-                  ${totalSelisihTW > 0 ? '+' : ''}${formatRp(totalSelisihTW)}
+                <td colspan="7" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">2. TOTAL KUMULATIF TRIWULAN ${twName} (${school.tahunAnggaran}):</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalSemulaTW).replace('Rp ', '')}</td>
+                <td colspan="2" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">MENJADI:</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalMenjadiTW).replace('Rp ', '')}</td>
+                <td class="num" style="font-weight: bold; color: ${totalSelisihTW >= 0 ? '#047857' : '#b91c1c'};">
+                  ${totalSelisihTW > 0 ? '+' : ''}${formatRp(totalSelisihTW).replace('Rp ', '')}
                 </td>
-                <td style="font-size: 6pt; color: #1e40af;">Kumulatif TW ${twName}</td>
+                <td style="font-size: 5.6pt; color: #1e40af; text-align: center;">TW ${twName}</td>
               </tr>
 
               <!-- Baris 3: Total 1 Tahun Anggaran -->
               <tr style="background-color: #fdf2f8; font-weight: bold;">
-                <td colspan="7" style="text-align: right; padding-right: 4pt;">3. TOTAL AKUMULASI 1 TAHUN (12 BULAN):</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalSemulaTahun)}</td>
-                <td colspan="2" style="text-align: right; padding-right: 4pt;">MENJADI:</td>
-                <td style="text-align: right; font-family: monospace;">${formatRp(totalMenjadiTahun)}</td>
-                <td style="text-align: right; font-family: monospace; color: ${totalSelisihTahun >= 0 ? '#047857' : '#b91c1c'};">
-                  ${totalSelisihTahun > 0 ? '+' : ''}${formatRp(totalSelisihTahun)}
+                <td colspan="7" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">3. TOTAL AKUMULASI 1 TAHUN (12 BULAN):</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalSemulaTahun).replace('Rp ', '')}</td>
+                <td colspan="2" style="text-align: right; padding-right: 4pt; font-size: 6.8pt;">MENJADI:</td>
+                <td class="num" style="font-weight: bold;">${formatRp(totalMenjadiTahun).replace('Rp ', '')}</td>
+                <td class="num" style="font-weight: bold; color: ${totalSelisihTahun >= 0 ? '#047857' : '#b91c1c'};">
+                  ${totalSelisihTahun > 0 ? '+' : ''}${formatRp(totalSelisihTahun).replace('Rp ', '')}
                 </td>
-                <td style="font-size: 6pt; color: #831843;">Tahun ${school.tahunAnggaran}</td>
+                <td style="font-size: 5.6pt; color: #831843; text-align: center;">Tahun ${school.tahunAnggaran}</td>
               </tr>
             </tfoot>
           </table>
 
-          <div style="font-size: 8pt; font-style: italic; margin-top: 5pt;">
-            Terbilang Anggaran Menjadi Bulan Ini: <b>" ${terbilang(totalMenjadi)} Rupiah "</b>
-          </div>
+          <div class="closing-section">
+            <div style="font-size: 7.2pt; font-style: italic; background-color: #faf9f6; border: 0.5pt solid #d1cbbf; padding: 2.5pt 5pt; border-radius: 2pt;">
+              Terbilang Anggaran Menjadi Bulan Ini: <b>" ${terbilang(totalMenjadi)} Rupiah "</b>
+            </div>
 
-          <div class="grid-signatures" style="margin-top: 10pt;">
-            <div class="sig-col">
-              <div>Mengetahui / Menyetujui,</div>
-              <div class="font-bold">Kepala Sekolah</div>
-              <div class="sig-space" style="height: 32pt;"></div>
-              <div class="sig-name">${school.kepsekNama}</div>
-              <div>NIP. ${school.kepsekNip}</div>
-            </div>
-            <div class="sig-col">
-              <div>Menyetujui,</div>
-              <div class="font-bold">Ketua Komite Sekolah</div>
-              <div class="sig-space" style="height: 32pt;"></div>
-              <div class="sig-name">${school.komiteNama}</div>
-              <div>Komite Sekolah</div>
-            </div>
-            <div class="sig-col">
-              <div>Sentani, 30 ${monthName} ${school.tahunAnggaran}</div>
-              <div class="font-bold">Bendahara BOSP</div>
-              <div class="sig-space" style="height: 32pt;"></div>
-              <div class="sig-name">${school.bendaharaNama}</div>
-              <div>NIP. ${school.bendaharaNip}</div>
+            <div class="grid-signatures" style="margin-top: 6pt;">
+              <div class="sig-col">
+                <div style="font-size: 7.5pt;">Mengetahui / Menyetujui,</div>
+                <div class="font-bold" style="font-size: 8pt;">Kepala Sekolah</div>
+                <div class="sig-space" style="height: 26pt;"></div>
+                <div class="sig-name" style="font-size: 8pt;">${school.kepsekNama}</div>
+                <div style="font-size: 6.8pt;">NIP. ${school.kepsekNip}</div>
+              </div>
+              <div class="sig-col">
+                <div style="font-size: 7.5pt;">Menyetujui,</div>
+                <div class="font-bold" style="font-size: 8pt;">Ketua Komite Sekolah</div>
+                <div class="sig-space" style="height: 26pt;"></div>
+                <div class="sig-name" style="font-size: 8pt;">${school.komiteNama}</div>
+                <div style="font-size: 6.8pt;">Komite Sekolah</div>
+              </div>
+              <div class="sig-col">
+                <div style="font-size: 7.5pt;">Sentani, 30 ${monthName} ${school.tahunAnggaran}</div>
+                <div class="font-bold" style="font-size: 8pt;">Bendahara BOSP</div>
+                <div class="sig-space" style="height: 26pt;"></div>
+                <div class="sig-name" style="font-size: 8pt;">${school.bendaharaNama}</div>
+                <div style="font-size: 6.8pt;">NIP. ${school.bendaharaNip}</div>
+              </div>
             </div>
           </div>
         </div>
@@ -1632,13 +1731,15 @@ export function printArkasPerubahanWorksheet(
   worksheet: ArkasPerubahanMonthWorksheet,
   monthIndex: number,
   school: SchoolProfile,
-  allWorksheets?: ArkasPerubahanMonthWorksheet[]
+  allWorksheets?: ArkasPerubahanMonthWorksheet[],
+  options?: ArkasPerubahanPrintOptions
 ): void {
   const htmlContent = buildArkasPerubahanPrintHtml(
     worksheet,
     monthIndex,
     school,
-    allWorksheets
+    allWorksheets,
+    options
   );
   const monthName = MONTH_NAMES[monthIndex] || 'Bulan';
   const printDocTitle = `ARKAS_PERUBAHAN_${monthName.toUpperCase()}_${school.tahunAnggaran}`;
@@ -1671,7 +1772,10 @@ export function printArkasPerubahanWorksheet(
       const originalTitle = document.title;
       document.title = printDocTitle;
 
+      let hasPrinted = false;
       const triggerPrint = () => {
+        if (hasPrinted) return;
+        hasPrinted = true;
         try {
           iframe.contentWindow?.focus();
           iframe.contentWindow?.print();
@@ -1687,9 +1791,9 @@ export function printArkasPerubahanWorksheet(
 
       if (iframe.contentWindow) {
         iframe.contentWindow.onload = () => {
-          setTimeout(triggerPrint, 250);
+          setTimeout(triggerPrint, 300);
         };
-        setTimeout(triggerPrint, 500);
+        setTimeout(triggerPrint, 600);
       } else {
         window.print();
         document.title = originalTitle;
@@ -1822,11 +1926,7 @@ export function buildRekapPerubahanPrintHtml(
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>REKAPITULASI_ARKAS_PERUBAHAN_${school.tahunAnggaran}</title>
         <style>
-          ${getPrintStyles()}
-          @page {
-            size: A4 landscape;
-            margin: 6mm 7mm;
-          }
+          ${getPrintStyles('landscape', '6mm 8mm 7mm 8mm')}
           html, body {
             width: 100% !important;
             height: auto !important;
