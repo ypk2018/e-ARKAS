@@ -29,11 +29,12 @@ import {
   SchoolProfile,
   ArkasPerubahanItem,
   UserAccount,
-  PerubahanStatus
+  PerubahanStatus,
+  BosRegulerItemTemplate
 } from '../types';
 import { formatRp, formatTanggalIndo } from '../utils/formatters';
 import { MONTH_NAMES } from '../data/schoolProfile';
-import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST } from '../data/standarData';
+import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { printRekapPerubahan } from '../utils/printDocument';
 
 interface RekapPerubahanViewProps {
@@ -78,6 +79,7 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
     item: ArkasPerubahanItem;
     monthIndex: number;
   } | null>(null);
+  const [selectedBosItemId, setSelectedBosItemId] = useState<string>('');
   const [editKodeRekening, setEditKodeRekening] = useState<string>('');
   const [editKodeProgram, setEditKodeProgram] = useState<string>('');
   const [editUraian, setEditUraian] = useState<string>('');
@@ -85,8 +87,44 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
   const [editSatuan, setEditSatuan] = useState<string>('bulan');
   const [editTarif, setEditTarif] = useState<number>(0);
   const [editAlasan, setEditAlasan] = useState<string>('');
-  const [editTemaId, setEditTemaId] = useState<string>('1');
-  const [editSubtemaKode, setEditSubtemaKode] = useState<string>('01.01');
+  const [editTemaId, setEditTemaId] = useState<string>('06');
+  const [editSubtemaKode, setEditSubtemaKode] = useState<string>('06.05');
+
+  // Auto application of BOS Reguler template item
+  const handleApplyBosItem = (itemTemplate: BosRegulerItemTemplate) => {
+    setSelectedBosItemId(itemTemplate.id);
+    setEditTemaId(itemTemplate.temaKode);
+    setEditSubtemaKode(itemTemplate.subtemaKode);
+    setEditKodeProgram(itemTemplate.kodeProgram);
+    setEditKodeRekening(itemTemplate.kodeRekening);
+    setEditUraian(itemTemplate.uraian);
+    setEditSatuan(itemTemplate.satuan);
+    setEditTarif(itemTemplate.tarifHarga);
+  };
+
+  // Synchronized Tema change
+  const handleTemaChange = (newTemaKode: string) => {
+    setEditTemaId(newTemaKode);
+    const availableSubtemas = SUBTEMA_PROGRAM_LIST.filter((s) => s.temaKode === newTemaKode);
+    if (availableSubtemas.length > 0) {
+      const firstSub = availableSubtemas[0];
+      setEditSubtemaKode(firstSub.kode);
+      if (firstSub.kegiatanList && firstSub.kegiatanList.length > 0) {
+        const progCode = firstSub.kegiatanList[0].split(' ')[0].replace(/\.$/, '');
+        if (progCode) setEditKodeProgram(progCode);
+      }
+    }
+  };
+
+  // Synchronized Subtema change
+  const handleSubtemaChange = (newSubtemaKode: string) => {
+    setEditSubtemaKode(newSubtemaKode);
+    const sub = SUBTEMA_PROGRAM_LIST.find((s) => s.kode === newSubtemaKode);
+    if (sub && sub.kegiatanList && sub.kegiatanList.length > 0) {
+      const progCode = sub.kegiatanList[0].split(' ')[0].replace(/\.$/, '');
+      if (progCode) setEditKodeProgram(progCode);
+    }
+  };
 
   const [movingItemData, setMovingItemData] = useState<{
     item: ArkasPerubahanItem;
@@ -281,15 +319,19 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
   // Handlers for Modals
   const handleOpenEditModal = (item: ArkasPerubahanItem, monthIndex: number) => {
     setEditingItemData({ item, monthIndex });
+    const matched = BOS_REGULER_ITEM_TEMPLATES.find(
+      (tpl) => tpl.kodeRekening === item.kodeRekening && tpl.uraian === item.uraian
+    );
+    setSelectedBosItemId(matched ? matched.id : '');
     setEditKodeRekening(item.kodeRekening);
-    setEditKodeProgram(item.kodeProgram || '02.01');
+    setEditKodeProgram(item.kodeProgram || '06.05.08');
     setEditUraian(item.uraian);
     setEditVolume(item.volume > 0 ? item.volume : item.semulaVolume || 1);
-    setEditSatuan(item.satuan || item.semulaSatuan || 'bulan');
+    setEditSatuan(item.satuan || item.semulaSatuan || 'rim');
     setEditTarif(item.tarifHarga > 0 ? item.tarifHarga : item.semulaTarif || 0);
     setEditAlasan(item.alasanPerubahan || '');
-    setEditTemaId(item.temaId || '1');
-    setEditSubtemaKode(item.subtemaKode || '01.01');
+    setEditTemaId(item.temaId || '06');
+    setEditSubtemaKode(item.subtemaKode || '06.05');
   };
 
   const handleSaveEditModal = (e: React.FormEvent) => {
@@ -1390,12 +1432,132 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveEditModal} className="space-y-4 text-xs">
+              {/* Pemilihan Otomatis Sesuai Item Belanja BOS Reguler Kemendikbudristek */}
+              <div className="p-3.5 bg-gradient-to-br from-[#FAF8F5] via-[#F4F0E6] to-[#EAE4D5] rounded-2xl border border-[#D5CEBF] shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#2C2A28]">
+                    <Sparkles className="w-4 h-4 text-[#8C7A3E]" />
+                    <span>Pilih Item Belanja BOS Reguler (Otomatis)</span>
+                  </div>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300">
+                    Standar Juknis ARKAS BOS Reguler
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#5C5852] leading-relaxed">
+                  Pilih item belanja resmi BOS Reguler di bawah ini untuk mengisi <strong>Tema</strong>, <strong>Subtema Program</strong>, <strong>Kode Rekening</strong>, <strong>Kode Program</strong>, <strong>Satuan</strong>, dan <strong>Tarif</strong> secara otomatis.
+                </p>
+
+                <div>
+                  <select
+                    value={selectedBosItemId}
+                    onChange={(e) => {
+                      const tpl = BOS_REGULER_ITEM_TEMPLATES.find((it) => it.id === e.target.value);
+                      if (tpl) {
+                        handleApplyBosItem(tpl);
+                      } else {
+                        setSelectedBosItemId('');
+                      }
+                    }}
+                    className="w-full p-2.5 bg-white border border-[#C5BDAF] rounded-xl font-medium text-[#2C2A28] focus:outline-none focus:ring-2 focus:ring-[#5A5A40] cursor-pointer shadow-xs text-xs"
+                  >
+                    <option value="">-- Pilih dari Katalog Belanja BOS Reguler ({BOS_REGULER_ITEM_TEMPLATES.length} Item Tersedia) --</option>
+                    {TEMA_STANDAR_LIST.map((tema) => {
+                      const temaItems = BOS_REGULER_ITEM_TEMPLATES.filter((it) => it.temaKode === tema.kode);
+                      if (temaItems.length === 0) return null;
+                      return (
+                        <optgroup key={tema.kode} label={`Standar ${tema.kode}: ${tema.nama}`}>
+                          {temaItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              [{item.subtemaKode}] {item.uraian} &mdash; {formatRp(item.tarifHarga)} / {item.satuan}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Quick chip presets based on current Tema */}
+                <div className="pt-0.5">
+                  <div className="text-[10px] font-semibold text-[#6B665E] uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>Item Belanja Populer Standar {editTemaId}:</span>
+                    <span className="text-[10px] text-[#8C867E]">Klik untuk terapkan</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BOS_REGULER_ITEM_TEMPLATES.filter((it) => it.temaKode === editTemaId).map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleApplyBosItem(tpl)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          selectedBosItemId === tpl.id || editUraian === tpl.uraian
+                            ? 'bg-[#2C2A28] text-white border-[#2C2A28] font-bold shadow-xs'
+                            : 'bg-white text-[#4A463F] border-[#D5CEBF] hover:bg-[#F9F7F2] hover:border-[#5A5A40]'
+                        }`}
+                      >
+                        {tpl.uraian.split('-')[0].trim()} ({formatRp(tpl.tarifHarga)})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-[#2C2A28]">Standar SNP (Tema)</label>
+                    <span className="text-[10px] text-[#8C867E]">8 Standar</span>
+                  </div>
+                  <select
+                    value={editTemaId}
+                    onChange={(e) => handleTemaChange(e.target.value)}
+                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
+                  >
+                    {TEMA_STANDAR_LIST.map((t) => (
+                      <option key={t.kode} value={t.kode}>
+                        Standar {t.kode} - {t.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-[#2C2A28]">Subtema / Program</label>
+                    <span className="text-[10px] text-emerald-700 font-medium">Otomatis Sesuai Tema</span>
+                  </div>
+                  <select
+                    value={editSubtemaKode}
+                    onChange={(e) => handleSubtemaChange(e.target.value)}
+                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
+                  >
+                    {SUBTEMA_PROGRAM_LIST.filter(
+                      (s) => s.temaKode === editTemaId
+                    ).map((s) => (
+                      <option key={s.kode} value={s.kode}>
+                        {s.kode} - {s.nama}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div>
                 <label className="block font-semibold text-[#2C2A28] mb-1">Kode Rekening</label>
                 <input
                   type="text"
                   value={editKodeRekening}
                   onChange={(e) => setEditKodeRekening(e.target.value)}
+                  className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-mono text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-[#2C2A28] mb-1">Kode Program / Kegiatan</label>
+                <input
+                  type="text"
+                  value={editKodeProgram}
+                  onChange={(e) => setEditKodeProgram(e.target.value)}
                   className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-mono text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
                   required
                 />
@@ -1410,43 +1572,6 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
                   className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
                   required
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-[#2C2A28] mb-1">
-                    Standar SNP (Tema)
-                  </label>
-                  <select
-                    value={editTemaId}
-                    onChange={(e) => setEditTemaId(e.target.value)}
-                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
-                  >
-                    {TEMA_STANDAR_LIST.map((t) => (
-                      <option key={t.kode} value={t.kode}>
-                        {t.kode}. {t.nama}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-[#2C2A28] mb-1">
-                    Subtema / Program
-                  </label>
-                  <select
-                    value={editSubtemaKode}
-                    onChange={(e) => setEditSubtemaKode(e.target.value)}
-                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
-                  >
-                    {SUBTEMA_PROGRAM_LIST.filter(
-                      (s) => s.temaKode === editTemaId
-                    ).map((s) => (
-                      <option key={s.kode} value={s.kode}>
-                        {s.kode} - {s.nama}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
               <div className="p-3 bg-[#F2EDE4]/60 border border-[#E0DACE] rounded-xl space-y-3">

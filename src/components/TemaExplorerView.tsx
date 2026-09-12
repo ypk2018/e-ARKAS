@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight } from 'lucide-react';
+import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight, Sparkles } from 'lucide-react';
 import { MonthWorksheet, KertasKerjaItem } from '../types';
-import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST } from '../data/standarData';
+import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { formatRp } from '../utils/formatters';
 import { MONTH_NAMES } from '../data/schoolProfile';
 
@@ -172,6 +172,42 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
                             {formatRp(sub.subTotal)}
                           </div>
                         </div>
+
+                        {/* Official BOS Reguler Kemendikbud Templates Available for this Subtema */}
+                        {(() => {
+                          const bosTemplates = BOS_REGULER_ITEM_TEMPLATES.filter((tpl) => tpl.subtemaKode === sub.kode);
+                          if (bosTemplates.length === 0) return null;
+                          return (
+                            <div className="pt-1 border-t border-[#E0DACE]/50">
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-bold text-[#6B665E] uppercase tracking-wider flex items-center gap-1">
+                                  <Sparkles className="w-3 h-3 text-[#8C7A3E]" />
+                                  Katalog Item Belanja BOS Reguler Kemendikbud:
+                                </span>
+                                <span className="text-[10px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                  {bosTemplates.length} item standar
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                                {bosTemplates.map((tpl) => (
+                                  <div
+                                    key={tpl.id}
+                                    className="p-2 rounded-lg bg-[#FAF8F5] border border-[#E8E2D6] text-[11px] flex items-center justify-between gap-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-[#2C2A28] truncate">{tpl.uraian}</div>
+                                      <div className="text-[10px] font-mono text-[#8C867E]">Rek: {tpl.kodeRekening}</div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                      <div className="font-bold text-[#5A5A40] text-[11px]">{formatRp(tpl.tarifHarga)}</div>
+                                      <div className="text-[9px] text-[#8C867E]">/{tpl.satuan}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Items under Subtema */}
                         {filteredSubItems.length === 0 ? (

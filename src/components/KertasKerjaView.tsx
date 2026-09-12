@@ -22,9 +22,9 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { MonthWorksheet, KertasKerjaItem, SchoolProfile, SpjDocument, UserAccount } from '../types';
+import { MonthWorksheet, KertasKerjaItem, SchoolProfile, SpjDocument, UserAccount, BosRegulerItemTemplate } from '../types';
 import { formatRp, formatTanggalIndo, generateUid } from '../utils/formatters';
-import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST } from '../data/standarData';
+import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { MONTH_NAMES } from '../data/schoolProfile';
 
 interface KertasKerjaViewProps {
@@ -64,14 +64,51 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
   const [isAddingNew, setIsAddingNew] = useState<boolean>(false);
 
   // Form states for new/edit item
-  const [formKodeRekening, setFormKodeRekening] = useState<string>('5.1.02.01.01.0024');
+  const [selectedBosItemId, setSelectedBosItemId] = useState<string>('');
+  const [formKodeRekening, setFormKodeRekening] = useState<string>('5.1.02.01.01.0025');
   const [formKodeProgram, setFormKodeProgram] = useState<string>('06.05.08');
   const [formUraian, setFormUraian] = useState<string>('');
   const [formVolume, setFormVolume] = useState<number>(1);
-  const [formSatuan, setFormSatuan] = useState<string>('buah');
-  const [formTarif, setFormTarif] = useState<number>(0);
+  const [formSatuan, setFormSatuan] = useState<string>('rim');
+  const [formTarif, setFormTarif] = useState<number>(65000);
   const [formTemaId, setFormTemaId] = useState<string>('06');
   const [formSubtemaKode, setFormSubtemaKode] = useState<string>('06.05');
+
+  // Handle auto-application of BOS Reguler template item
+  const handleApplyBosItem = (itemTemplate: BosRegulerItemTemplate) => {
+    setSelectedBosItemId(itemTemplate.id);
+    setFormTemaId(itemTemplate.temaKode);
+    setFormSubtemaKode(itemTemplate.subtemaKode);
+    setFormKodeProgram(itemTemplate.kodeProgram);
+    setFormKodeRekening(itemTemplate.kodeRekening);
+    setFormUraian(itemTemplate.uraian);
+    setFormSatuan(itemTemplate.satuan);
+    setFormTarif(itemTemplate.tarifHarga);
+  };
+
+  // Handle Tema (Standar) change with automatic Subtema (Program) update
+  const handleTemaChange = (newTemaKode: string) => {
+    setFormTemaId(newTemaKode);
+    const availableSubtemas = SUBTEMA_PROGRAM_LIST.filter((s) => s.temaKode === newTemaKode);
+    if (availableSubtemas.length > 0) {
+      const firstSub = availableSubtemas[0];
+      setFormSubtemaKode(firstSub.kode);
+      if (firstSub.kegiatanList && firstSub.kegiatanList.length > 0) {
+        const progCode = firstSub.kegiatanList[0].split(' ')[0].replace(/\.$/, '');
+        if (progCode) setFormKodeProgram(progCode);
+      }
+    }
+  };
+
+  // Handle Subtema (Program) change with automatic program code update
+  const handleSubtemaChange = (newSubtemaKode: string) => {
+    setFormSubtemaKode(newSubtemaKode);
+    const sub = SUBTEMA_PROGRAM_LIST.find((s) => s.kode === newSubtemaKode);
+    if (sub && sub.kegiatanList && sub.kegiatanList.length > 0) {
+      const progCode = sub.kegiatanList[0].split(' ')[0].replace(/\.$/, '');
+      if (progCode) setFormKodeProgram(progCode);
+    }
+  };
 
   // Calculate SPJ Usage status for each month (0..11)
   const monthlySpjStatus = useMemo(() => {
@@ -146,12 +183,13 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
   const handleOpenAdd = () => {
     setIsAddingNew(true);
     setEditingItem(null);
-    setFormKodeRekening('5.1.02.01.01.0024');
+    setSelectedBosItemId('bos_atk_hvs_a4');
+    setFormKodeRekening('5.1.02.01.01.0025');
     setFormKodeProgram('06.05.08');
-    setFormUraian('');
+    setFormUraian('Kertas HVS-Bola Dunia A4 / 70 Gram');
     setFormVolume(1);
-    setFormSatuan('buah');
-    setFormTarif(10000);
+    setFormSatuan('rim');
+    setFormTarif(65000);
     setFormTemaId('06');
     setFormSubtemaKode('06.05');
   };
@@ -159,6 +197,10 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
   const handleOpenEdit = (it: KertasKerjaItem) => {
     setEditingItem(it);
     setIsAddingNew(false);
+    const matched = BOS_REGULER_ITEM_TEMPLATES.find(
+      (tpl) => tpl.kodeRekening === it.kodeRekening && tpl.uraian === it.uraian
+    );
+    setSelectedBosItemId(matched ? matched.id : '');
     setFormKodeRekening(it.kodeRekening);
     setFormKodeProgram(it.kodeProgram);
     setFormUraian(it.uraian);
@@ -654,36 +696,109 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
             </div>
 
             <form onSubmit={handleSaveForm} className="space-y-3.5 text-xs">
+              {/* Pemilihan Otomatis Sesuai Item Belanja BOS Reguler Kemendikbudristek */}
+              <div className="p-3.5 bg-gradient-to-br from-[#FAF8F5] via-[#F4F0E6] to-[#EAE4D5] rounded-2xl border border-[#D5CEBF] shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-[#2C2A28]">
+                    <Sparkles className="w-4 h-4 text-[#8C7A3E]" />
+                    <span>Pilih Item Belanja BOS Reguler (Otomatis)</span>
+                  </div>
+                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-semibold border border-emerald-300">
+                    Standar Juknis ARKAS BOS Reguler
+                  </span>
+                </div>
+                <p className="text-[11px] text-[#5C5852] leading-relaxed">
+                  Pilih item belanja resmi BOS Reguler di bawah ini untuk mengisi <strong>Tema</strong>, <strong>Subtema Program</strong>, <strong>Kode Rekening</strong>, <strong>Kode Program</strong>, <strong>Satuan</strong>, dan <strong>Tarif</strong> secara otomatis.
+                </p>
+
+                <div>
+                  <select
+                    value={selectedBosItemId}
+                    onChange={(e) => {
+                      const tpl = BOS_REGULER_ITEM_TEMPLATES.find((it) => it.id === e.target.value);
+                      if (tpl) {
+                        handleApplyBosItem(tpl);
+                      } else {
+                        setSelectedBosItemId('');
+                      }
+                    }}
+                    className="w-full p-2.5 bg-white border border-[#C5BDAF] rounded-xl font-medium text-[#2C2A28] focus:outline-none focus:ring-2 focus:ring-[#5A5A40] cursor-pointer shadow-xs text-xs"
+                  >
+                    <option value="">-- Pilih dari Katalog Belanja BOS Reguler ({BOS_REGULER_ITEM_TEMPLATES.length} Item Tersedia) --</option>
+                    {TEMA_STANDAR_LIST.map((tema) => {
+                      const temaItems = BOS_REGULER_ITEM_TEMPLATES.filter((it) => it.temaKode === tema.kode);
+                      if (temaItems.length === 0) return null;
+                      return (
+                        <optgroup key={tema.kode} label={`Standar ${tema.kode}: ${tema.nama}`}>
+                          {temaItems.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              [{item.subtemaKode}] {item.uraian} &mdash; {formatRp(item.tarifHarga)} / {item.satuan}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                {/* Quick chip presets based on current Tema */}
+                <div className="pt-0.5">
+                  <div className="text-[10px] font-semibold text-[#6B665E] uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span>Item Belanja Populer Standar {formTemaId}:</span>
+                    <span className="text-[10px] text-[#8C867E]">Klik untuk terapkan</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BOS_REGULER_ITEM_TEMPLATES.filter((it) => it.temaKode === formTemaId).map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => handleApplyBosItem(tpl)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all cursor-pointer ${
+                          selectedBosItemId === tpl.id || formUraian === tpl.uraian
+                            ? 'bg-[#2C2A28] text-white border-[#2C2A28] font-bold shadow-xs'
+                            : 'bg-white text-[#4A463F] border-[#D5CEBF] hover:bg-[#F9F7F2] hover:border-[#5A5A40]'
+                        }`}
+                      >
+                        {tpl.uraian.split('-')[0].trim()} ({formatRp(tpl.tarifHarga)})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Standar / Tema & Subtema */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold text-[#2C2A28] mb-1">Tema (Standar)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-[#2C2A28]">Tema (Standar)</label>
+                    <span className="text-[10px] text-[#8C867E]">8 Standar SNP</span>
+                  </div>
                   <select
                     value={formTemaId}
-                    onChange={(e) => {
-                      setFormTemaId(e.target.value);
-                      const matchSub = SUBTEMA_PROGRAM_LIST.find((s) => s.temaKode === e.target.value);
-                      if (matchSub) setFormSubtemaKode(matchSub.kode);
-                    }}
-                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-medium text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
+                    onChange={(e) => handleTemaChange(e.target.value)}
+                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-medium text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
                   >
                     {TEMA_STANDAR_LIST.map((t) => (
                       <option key={t.kode} value={t.kode}>
-                        {t.kode}. {t.nama}
+                        Standar {t.kode} - {t.nama}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-[#2C2A28] mb-1">Subtema (Program)</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-[#2C2A28]">Subtema (Program)</label>
+                    <span className="text-[10px] text-emerald-700 font-medium">Otomatis Sesuai Tema</span>
+                  </div>
                   <select
                     value={formSubtemaKode}
-                    onChange={(e) => setFormSubtemaKode(e.target.value)}
-                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-medium text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
+                    onChange={(e) => handleSubtemaChange(e.target.value)}
+                    className="w-full p-2.5 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl font-medium text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
                   >
                     {SUBTEMA_PROGRAM_LIST.filter((s) => s.temaKode === formTemaId).map((s) => (
                       <option key={s.kode} value={s.kode}>
-                        {s.kode}. {s.nama}
+                        {s.kode} - {s.nama}
                       </option>
                     ))}
                   </select>

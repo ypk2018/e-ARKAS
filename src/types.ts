@@ -119,6 +119,24 @@ export interface SubtemaProgram {
   kegiatanList?: string[];
 }
 
+export interface BosRegulerItemTemplate {
+  id: string;
+  temaKode: string;
+  temaNama: string;
+  subtemaKode: string;
+  subtemaNama: string;
+  kegiatanKode: string;
+  kegiatanNama: string;
+  kodeRekening: string;
+  kodeProgram: string;
+  uraian: string;
+  satuan: string;
+  tarifHarga: number;
+  kategori: string;
+  penerimaDefault?: string;
+  jabatanDefault?: string;
+}
+
 export interface SpjItem {
   kode?: string;
   nama: string;
