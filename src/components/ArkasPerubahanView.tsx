@@ -63,6 +63,7 @@ interface ArkasPerubahanViewProps {
   onAddActivityLog?: (log: any) => void;
   currentUser?: UserAccount;
   onNavigateToRekapPerubahan?: () => void;
+  onNavigateToManualPerubahan?: () => void;
   onSaveItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
   onEditItem?: (item: ArkasPerubahanItem, monthIndex: number) => void;
   onHilangkanItem?: (item: ArkasPerubahanItem, monthIndex: number, reason?: string) => void;
@@ -87,6 +88,7 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   onAddActivityLog,
   currentUser,
   onNavigateToRekapPerubahan,
+  onNavigateToManualPerubahan,
   onSaveItem,
   onEditItem,
   onHilangkanItem,
@@ -698,22 +700,35 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
               </button>
             )}
 
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center gap-2 bg-[#059669] hover:bg-[#047857] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
-              title="Tambah rincian belanja baru yang sebelumnya tidak ada di ARKAS Murni"
-            >
-              <Plus className="w-4 h-4" />
-              <span>+ Tambah Belanja Baru</span>
-            </button>
+            {onNavigateToManualPerubahan ? (
+              <button
+                id="btn-nav-tambah-manual-perubahan"
+                onClick={onNavigateToManualPerubahan}
+                className="flex items-center gap-2 bg-[#059669] hover:bg-[#047857] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Submenu Tambah Manual Sesuai Kebutuhan"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Tambah Manual (Isi Kebutuhan)</span>
+              </button>
+            ) : (
+              <button
+                onClick={handleOpenAdd}
+                className="flex items-center gap-2 bg-[#059669] hover:bg-[#047857] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Tambah rincian belanja baru yang sebelumnya tidak ada di ARKAS Murni"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Tambah Belanja Baru</span>
+              </button>
+            )}
 
             <button
+              id="btn-print-perubahan-komparatif"
               onClick={handlePrint}
               className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
-              title="Cetak format perbandingan komparatif RKA-Perubahan A4"
+              title="Cetak format perbandingan komparatif RKA-Perubahan A4 (13 Kolom)"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak Komparatif A4</span>
+              <span>Cetak / Simpan PDF (13 Kolom)</span>
             </button>
 
             <button

@@ -15,10 +15,12 @@ import {
   BadgeCheck,
   FileCheck,
   Check,
-  X
+  X,
+  Printer
 } from 'lucide-react';
 import { UserAccount, SchoolProfile } from '../types';
 import { SchoolLogo } from './SchoolLogo';
+import { printUserAccounts } from '../utils/printDocument';
 
 interface UserManagementViewProps {
   currentUser: UserAccount;
@@ -170,6 +172,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             </p>
           </div>
         </div>
+
+        <button
+          type="button"
+          id="btn-print-user-accounts"
+          onClick={() => printUserAccounts(school, users)}
+          className="flex items-center gap-1.5 text-xs font-bold text-[#2C2A28] bg-[#FAF8F5] hover:bg-[#E8E2D6] px-3.5 py-2.5 rounded-xl border border-[#D9D1C2] transition shadow-2xs shrink-0 cursor-pointer"
+          title="Cetak atau Simpan PDF Daftar Hak Akses & Akun Pejabat BOSP"
+        >
+          <Printer className="w-4 h-4 text-[#5A5A40]" />
+          <span>Cetak / Simpan PDF</span>
+        </button>
       </div>
 
       {/* Success Notification Alert */}

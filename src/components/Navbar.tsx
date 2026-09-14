@@ -20,6 +20,9 @@ interface NavbarProps {
   onOpenUserManagement?: () => void;
   lastSavedTime?: string;
   isAutoSaving?: boolean;
+  onManualSync?: () => void;
+  isSyncing?: boolean;
+  syncPeer?: string | null;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -37,11 +40,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   onOpenUserManagement,
   lastSavedTime,
-  isAutoSaving
+  isAutoSaving,
+  onManualSync,
+  isSyncing,
+  syncPeer
 }) => {
   return (
     <header className="sticky top-0 z-20 bg-[#F2EDE4] border-b border-[#E0DACE] px-6 py-3.5 flex flex-wrap items-center justify-between gap-4 shadow-xs">
-      {/* Left: Month selector, Search, and Auto-save indicator */}
+      {/* Left: Month selector, Search, Auto-save & Live Sync */}
       <div className="flex items-center gap-3">
         <div className="flex items-center bg-[#E8E2D6] p-1 rounded-xl border border-[#D9D1C2]">
           <Calendar className="w-4 h-4 ml-2 text-[#5A5A40]" />
@@ -72,15 +78,36 @@ export const Navbar: React.FC<NavbarProps> = ({
           />
         </div>
 
+        {/* Real-time Collaborative Synchronization Badge (Kepsek <-> Bendahara) */}
+        <button
+          type="button"
+          id="btn-navbar-live-sync"
+          onClick={onManualSync}
+          title={`Sinkronisasi 2 arah otomatis aktif.\nJika Kepala Sekolah mengisi/mengubah data, langsung otomatis tampil di Bendahara, dan sebaliknya.${syncPeer ? `\nTerakhir disinkronkan oleh: ${syncPeer}` : ''}\nKlik untuk menyinkronkan data sekarang.`}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-300/80 text-[11px] font-bold text-emerald-900 shadow-2xs transition active:scale-95 cursor-pointer"
+        >
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600"></span>
+          </span>
+          <span className="hidden lg:inline">Sinkron Otomatis (Kepsek ↔ Bendahara)</span>
+          <span className="lg:hidden">Live Sync</span>
+          {isSyncing ? (
+            <RefreshCw className="w-3 h-3 text-emerald-700 animate-spin ml-0.5" />
+          ) : (
+            <RefreshCw className="w-2.5 h-2.5 text-emerald-600 opacity-60 ml-0.5" />
+          )}
+        </button>
+
         {/* Real-time Auto-Save Status Badge */}
-        <div className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EAE4D8] border border-[#D9D1C2] text-[10px] font-medium text-[#5C5852]">
+        <div className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#EAE4D8] border border-[#D9D1C2] text-[10px] font-medium text-[#5C5852]">
           {isAutoSaving ? (
             <RefreshCw className="w-3 h-3 text-[#5A5A40] animate-spin" />
           ) : (
             <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
           )}
           <span>
-            {isAutoSaving ? 'Menyimpan...' : `Tersimpan otomatis ${lastSavedTime ? `(${lastSavedTime})` : ''}`}
+            {isAutoSaving ? 'Menyimpan...' : `Tersimpan ${lastSavedTime ? `(${lastSavedTime})` : ''}`}
           </span>
         </div>
       </div>
@@ -112,10 +139,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           id="btn-navbar-print"
           onClick={onPrintWorksheet}
           className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-4 py-2 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
-          title="Cetak Kertas Kerja Bulanan (Format Resmi A4)"
+          title="Cetak atau Simpan PDF Kertas Kerja Bulanan (Format Resmi A4)"
         >
           <Printer className="w-4 h-4" />
-          <span className="hidden sm:inline">Cetak Kertas Kerja</span>
+          <span className="hidden sm:inline">Cetak / Simpan PDF</span>
         </button>
 
         <button

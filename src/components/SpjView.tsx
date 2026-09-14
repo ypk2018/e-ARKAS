@@ -581,6 +581,7 @@ export const SpjView: React.FC<SpjViewProps> = ({
           {/* Action Buttons */}
           <div className="pt-3 border-t border-[#E0DACE] flex items-center gap-2.5">
             <button
+              id="btn-save-spj-arsip"
               onClick={handleSave}
               className="flex-1 flex items-center justify-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
             >
@@ -588,12 +589,13 @@ export const SpjView: React.FC<SpjViewProps> = ({
               <span>Simpan ke Arsip</span>
             </button>
             <button
+              id="btn-print-spj-pdf"
               onClick={() => printSpjDocument(doc, school, doc.rangkap ? 'DUA_RANGKAP' : 'ASLI')}
               className="flex items-center justify-center gap-1.5 bg-[#C06E52] hover:bg-[#A85A3F] text-white font-medium px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
               title="Cetak langsung ke printer atau simpan sebagai PDF standar A4"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak / PDF</span>
+              <span>Cetak / Simpan PDF</span>
             </button>
           </div>
         </div>
@@ -610,11 +612,13 @@ export const SpjView: React.FC<SpjViewProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              id="btn-print-spj-preview-pdf"
               onClick={() => printSpjDocument(doc, school, 'ASLI')}
-              className="flex items-center gap-1 text-[11px] bg-white hover:bg-[#F9F7F2] text-[#2C2A28] px-3 py-1.5 rounded-lg border border-[#D9D1C2] font-medium shadow-2xs transition active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 text-xs bg-white hover:bg-[#F9F7F2] text-[#2C2A28] px-3.5 py-1.5 rounded-lg border border-[#D9D1C2] font-semibold shadow-2xs transition active:scale-95 cursor-pointer"
+              title="Cetak atau Simpan PDF Lembar Cetak SPJ A4"
             >
               <Printer className="w-3.5 h-3.5 text-[#5A5A40]" />
-              <span>Cetak PDF</span>
+              <span>Cetak / Simpan PDF</span>
             </button>
             <button
               type="button"

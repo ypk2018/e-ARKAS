@@ -413,6 +413,13 @@ const getPrintStyles = (
 };
 
 /**
+ * Returns HTML img tag for official school logo
+ */
+const getSchoolLogoSvg = (_school?: SchoolProfile): string => {
+  return `<img src="/logo_smpn7.png" alt="Logo SMP Negeri 7 Sentani" style="width: 48pt; height: 48pt; object-fit: contain;" />`;
+};
+
+/**
  * Builds HTML for a single SPJ document page
  */
 export function generateSingleDocPageHtml(
@@ -2693,4 +2700,846 @@ export function printRekapPerubahan(
     window.print();
   }
 }
+
+/**
+ * Universal print helper via hidden iframe
+ */
+function printHtmlViaIframe(htmlContent: string, docTitle: string): void {
+  try {
+    const existingIframe = document.getElementById('bosp-universal-print-frame');
+    if (existingIframe) {
+      existingIframe.remove();
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.id = 'bosp-universal-print-frame';
+    iframe.style.position = 'fixed';
+    iframe.style.right = '0';
+    iframe.style.bottom = '0';
+    iframe.style.width = '100vw';
+    iframe.style.height = '100vh';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+    iframe.style.zIndex = '-999';
+    document.body.appendChild(iframe);
+
+    const iframeDoc = iframe.contentWindow?.document || iframe.contentDocument;
+    if (iframeDoc) {
+      iframeDoc.open();
+      iframeDoc.write(htmlContent);
+      iframeDoc.close();
+
+      const originalTitle = document.title;
+      document.title = docTitle;
+
+      const triggerPrint = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } catch (e) {
+          window.print();
+        } finally {
+          setTimeout(() => {
+            document.title = originalTitle;
+            iframe.remove();
+          }, 1000);
+        }
+      };
+
+      if (iframe.contentWindow) {
+        iframe.contentWindow.onload = () => {
+          setTimeout(triggerPrint, 250);
+        };
+        setTimeout(triggerPrint, 500);
+      } else {
+        window.print();
+        document.title = originalTitle;
+      }
+    } else {
+      window.print();
+    }
+  } catch (err) {
+    console.error('Print fallback to window.print():', err);
+    window.print();
+  }
+}
+
+/**
+ * 1. Cetak / Simpan PDF: Ringkasan Eksekutif Dashboard BOSP
+ */
+export function printDashboardSummary(
+  school: SchoolProfile,
+  worksheets: MonthWorksheet[],
+  perubahanWorksheets: ArkasPerubahanMonthWorksheet[],
+  documents: SpjDocument[]
+): void {
+  const totalMurni = worksheets.reduce((sum, w) => sum + w.items.reduce((s, it) => s + it.jumlah, 0), 0);
+  const totalPerubahan = perubahanWorksheets.reduce((sum, w) => sum + w.items.reduce((s, it) => s + (it.statusPerubahan !== 'DIHILANGKAN' ? it.jumlah : 0), 0), 0);
+  const selisihNeto = totalPerubahan - totalMurni;
+  const penerimaan = worksheets[0]?.totalPenerimaan || 340000000;
+  const sisaMurni = penerimaan - totalMurni;
+  const sisaPerubahan = penerimaan - totalPerubahan;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>RINGKASAN_EKSEKUTIF_BOSP_${school.tahunAnggaran}</title>
+        <style>
+          ${getPrintStyles('portrait')}
+          .kpi-box { border: 1pt solid #ccc; padding: 8pt; border-radius: 4pt; background: #fafafa; }
+          .kpi-val { font-size: 13pt; font-weight: bold; margin-top: 2pt; }
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 12pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              LAPORAN RINGKASAN EKSEKUTIF DANA BOSP TAHUN ${school.tahunAnggaran}
+            </h2>
+            <div style="font-size: 9.5pt; color: #555; margin-top: 2pt;">
+              Perbandingan Alokasi Anggaran Murni vs ARKAS Perubahan & Rekapitulasi SPJ
+            </div>
+          </div>
+
+          <!-- KPI Grid -->
+          <table style="width: 100%; margin-bottom: 12pt; border-collapse: separate; border-spacing: 6pt;">
+            <tr>
+              <td style="width: 33%; vertical-align: top;">
+                <div class="kpi-box">
+                  <div style="font-size: 8.5pt; text-transform: uppercase; color: #666; font-weight: bold;">Penerimaan Pagu BOSP</div>
+                  <div class="kpi-val" style="color: #1b5e20;">${formatRp(penerimaan)}</div>
+                  <div style="font-size: 8pt; color: #777;">Tahun Anggaran ${school.tahunAnggaran}</div>
+                </div>
+              </td>
+              <td style="width: 33%; vertical-align: top;">
+                <div class="kpi-box">
+                  <div style="font-size: 8.5pt; text-transform: uppercase; color: #666; font-weight: bold;">ARKAS Murni (Semula)</div>
+                  <div class="kpi-val">${formatRp(totalMurni)}</div>
+                  <div style="font-size: 8pt; color: #777;">Sisa Pagu: ${formatRp(sisaMurni)}</div>
+                </div>
+              </td>
+              <td style="width: 33%; vertical-align: top;">
+                <div class="kpi-box" style="border-color: #059669; background: #ecfdf5;">
+                  <div style="font-size: 8.5pt; text-transform: uppercase; color: #065f46; font-weight: bold;">ARKAS Perubahan (Menjadi)</div>
+                  <div class="kpi-val" style="color: #047857;">${formatRp(totalPerubahan)}</div>
+                  <div style="font-size: 8pt; color: #065f46;">Selisih: ${selisihNeto >= 0 ? '+' : ''}${formatRp(selisihNeto)}</div>
+                </div>
+              </td>
+            </tr>
+          </table>
+
+          <!-- Triwulan Comparison Table -->
+          <div style="font-size: 10pt; font-weight: bold; margin-bottom: 4pt; border-left: 3pt solid #5A5A40; padding-left: 4pt;">
+            A. Perbandingan Realisasi Anggaran per Triwulan
+          </div>
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 14pt; font-size: 8.5pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">Triwulan</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left;">Bulan Cakupan</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: right;">ARKAS Murni</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: right;">ARKAS Perubahan</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: right;">Selisih (+/-)</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">Keterangan</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${[
+                { tw: 'Triwulan I', range: 'Januari - Maret', mIdx: [0, 1, 2] },
+                { tw: 'Triwulan II', range: 'April - Juni', mIdx: [3, 4, 5] },
+                { tw: 'Triwulan III', range: 'Juli - September', mIdx: [6, 7, 8] },
+                { tw: 'Triwulan IV', range: 'Oktober - Desember', mIdx: [9, 10, 11] }
+              ].map((tw) => {
+                const mMurni = tw.mIdx.reduce((acc, idx) => acc + (worksheets[idx]?.items.reduce((s, it) => s + it.jumlah, 0) || 0), 0);
+                const mPerub = tw.mIdx.reduce((acc, idx) => acc + (perubahanWorksheets[idx]?.items.reduce((s, it) => s + (it.statusPerubahan !== 'DIHILANGKAN' ? it.jumlah : 0), 0) || 0), 0);
+                const sel = mPerub - mMurni;
+                return `
+                  <tr>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; font-weight: bold;">${tw.tw}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt;">${tw.range}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: right;">${formatRp(mMurni)}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: right; font-weight: bold; color: #047857;">${formatRp(mPerub)}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: right; font-weight: bold; ${sel > 0 ? 'color: #047857;' : sel < 0 ? 'color: #b91c1c;' : ''}">
+                      ${sel > 0 ? '+' : ''}${formatRp(sel)}
+                    </td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; font-size: 8pt;">
+                      ${sel > 0 ? 'Penambahan Program' : sel < 0 ? 'Efisiensi Anggaran' : 'Sesuai Pagu Semula'}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr style="background: #f8fafc; font-weight: bold;">
+                <td colspan="2" style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">TOTAL TAHUNAN ${school.tahunAnggaran}</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: right;">${formatRp(totalMurni)}</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: right; color: #047857;">${formatRp(totalPerubahan)}</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: right; color: ${selisihNeto >= 0 ? '#047857' : '#b91c1c'};">
+                  ${selisihNeto >= 0 ? '+' : ''}${formatRp(selisihNeto)}
+                </td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">-</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- SPJ Archive Summary -->
+          <div style="font-size: 10pt; font-weight: bold; margin-bottom: 4pt; border-left: 3pt solid #5A5A40; padding-left: 4pt;">
+            B. Ringkasan Dokumen Pertanggungjawaban (SPJ) Terarsip: ${documents.length} Dokumen
+          </div>
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 8.5pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">No</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left;">Nomor Dokumen SPJ</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">Jenis Berkas</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left;">Penerima / Rekanan</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: right;">Jumlah Nilai (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${documents.slice(0, 5).map((doc, idx) => `
+                <tr>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center;">${idx + 1}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; font-family: monospace;">${doc.nomor}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center; text-transform: uppercase;">${doc.type}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt;">${doc.penerima}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: right; font-weight: bold;">${formatRp(doc.jumlah)}</td>
+                </tr>
+              `).join('')}
+              ${documents.length === 0 ? '<tr><td colspan="5" style="border: 0.5pt solid #333; padding: 8pt; text-align: center; color: #888;">Belum ada dokumen SPJ yang disimpan dalam arsip sistem.</td></tr>' : ''}
+            </tbody>
+          </table>
+
+          <!-- Signatures -->
+          <div class="grid-signatures" style="margin-top: 20pt;">
+            <div class="sig-col">
+              <div>Mengetahui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Bendahara BOSP</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `RINGKASAN_EKSEKUTIF_BOSP_${school.tahunAnggaran}`);
+}
+
+/**
+ * 2. Cetak / Simpan PDF: Formulir Tambah Kegiatan Baru ARKAS Perubahan secara Manual
+ */
+export function printManualPerubahanForm(
+  school: SchoolProfile,
+  item: ArkasPerubahanItem,
+  bulanNama: string
+): void {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>FORMULIR_USULAN_PERUBAHAN_MANUAL_${item.kodeRekening}</title>
+        <style>
+          ${getPrintStyles('portrait')}
+          .field-label { font-weight: bold; width: 170pt; }
+          .form-table td { padding: 5pt 6pt; border-bottom: 0.5pt solid #eee; vertical-align: top; }
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 16pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              LEMBAR USULAN PENAMBAHAN BELANJA MANUAL ARKAS PERUBAHAN
+            </h2>
+            <div style="font-size: 10pt; color: #444; margin-top: 3pt;">
+              Alokasi Bulan: <strong>${bulanNama}</strong> • Tahun Anggaran ${school.tahunAnggaran}
+            </div>
+          </div>
+
+          <table class="form-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9.5pt;">
+            <tr>
+              <td class="field-label">Kode Rekening Belanja</td>
+              <td style="font-family: monospace; font-weight: bold;">${item.kodeRekening}</td>
+            </tr>
+            <tr>
+              <td class="field-label">Kode Program / Standar</td>
+              <td>${item.kodeProgram} (${item.temaNama || '8 Standar Pendidikan'})</td>
+            </tr>
+            <tr>
+              <td class="field-label">Kegiatan & Subtema</td>
+              <td>${item.kegiatanNama || item.subtemaNama || '-'}</td>
+            </tr>
+            <tr>
+              <td class="field-label">Uraian Belanja / Pengadaan</td>
+              <td style="font-weight: bold; font-size: 10pt; color: #1a1a1a;">${item.uraian}</td>
+            </tr>
+            <tr>
+              <td class="field-label">Volume & Satuan</td>
+              <td>${item.volume.toLocaleString('id-ID')} ${item.satuan}</td>
+            </tr>
+            <tr>
+              <td class="field-label">Tarif Harga Satuan</td>
+              <td>${formatRp(item.tarifHarga)}</td>
+            </tr>
+            <tr>
+              <td class="field-label" style="background: #ecfdf5;">Total Anggaran Belanja</td>
+              <td style="background: #ecfdf5; font-size: 11pt; font-weight: bold; color: #047857;">
+                ${formatRp(item.jumlah)}
+              </td>
+            </tr>
+            <tr>
+              <td class="field-label">Terbilang</td>
+              <td style="font-style: italic; text-transform: capitalize;">${terbilang(item.jumlah)} Rupiah</td>
+            </tr>
+            <tr>
+              <td class="field-label">Status Perubahan</td>
+              <td><span style="display: inline-block; padding: 2pt 6pt; background: #059669; color: white; border-radius: 3pt; font-size: 8.5pt; font-weight: bold;">${item.statusPerubahan}</span></td>
+            </tr>
+            <tr>
+              <td class="field-label">Alasan / Justifikasi Urgensi</td>
+              <td style="line-height: 1.4; color: #2c2a28;">${item.alasanPerubahan || 'Kebutuhan mendesak operasional satuan pendidikan'}</td>
+            </tr>
+          </table>
+
+          <div style="border: 1pt dashed #999; padding: 8pt; margin-bottom: 20pt; font-size: 8.5pt; background: #fafafa; border-radius: 4pt;">
+            <strong>Catatan Verifikasi Tim Manajemen BOSP:</strong><br>
+            Belanja baru ini telah diinput secara manual sesuai kebutuhan riil satuan pendidikan dan masuk dalam lembar kerja komparatif 13 kolom ARKAS Perubahan TA ${school.tahunAnggaran}.
+          </div>
+
+          <!-- Signatures -->
+          <div class="grid-signatures" style="margin-top: 14pt;">
+            <div class="sig-col">
+              <div>Mengetahui / Menyetujui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Bendahara BOSP</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `USULAN_PERUBAHAN_MANUAL_${item.kodeRekening}`);
+}
+
+/**
+ * 3. Cetak / Simpan PDF: Penjelajah Tema & Subtema (8 Standar Nasional Pendidikan)
+ */
+export function printTemaExplorer(
+  school: SchoolProfile,
+  worksheets: MonthWorksheet[]
+): void {
+  // Aggregate per tema
+  const temaStats: Record<string, { total: number; itemCount: number }> = {};
+  worksheets.forEach((ws) => {
+    ws.items.forEach((it) => {
+      const tid = it.temaId || '06';
+      if (!temaStats[tid]) {
+        temaStats[tid] = { total: 0, itemCount: 0 };
+      }
+      temaStats[tid].total += it.jumlah;
+      temaStats[tid].itemCount += 1;
+    });
+  });
+
+  const grandTotal = Object.values(temaStats).reduce((acc, t) => acc + t.total, 0);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>MATRIKS_8_STANDAR_BOSP_${school.tahunAnggaran}</title>
+        <style>
+          ${getPrintStyles('landscape')}
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 12pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              MATRIKS TEMA 8 STANDAR NASIONAL PENDIDIKAN & ALOKASI BOSP
+            </h2>
+            <div style="font-size: 9.5pt; color: #555;">Tahun Anggaran ${school.tahunAnggaran} • Satuan Pendidikan: ${school.nama}</div>
+          </div>
+
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 35pt;">Kode</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: left;">Nama Tema / Standar Nasional Pendidikan (SNP)</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 70pt;">Jumlah Item</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: right; width: 110pt;">Total Alokasi (Rp)</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 65pt;">Persentase</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${TEMA_STANDAR_LIST.map((tema) => {
+                const stat = temaStats[tema.kode] || { total: 0, itemCount: 0 };
+                const pct = grandTotal > 0 ? ((stat.total / grandTotal) * 100).toFixed(1) : '0';
+                return `
+                  <tr>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; font-weight: bold;">${tema.kode}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; font-weight: bold;">${tema.nama}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">${stat.itemCount} kegiatan</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: right; font-weight: bold;">${formatRp(stat.total)}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">${pct}%</td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr style="background: #f8fafc; font-weight: bold;">
+                <td colspan="2" style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">TOTAL ALOKASI 8 STANDAR</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">
+                  ${Object.values(temaStats).reduce((acc, t) => acc + t.itemCount, 0)} kegiatan
+                </td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: right; color: #1b5e20;">${formatRp(grandTotal)}</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">100%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="grid-signatures" style="margin-top: 14pt;">
+            <div class="sig-col">
+              <div>Mengetahui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 35pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Bendahara BOSP</div>
+              <div class="sig-space" style="height: 35pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `MATRIKS_8_STANDAR_BOSP_${school.tahunAnggaran}`);
+}
+
+/**
+ * 4. Cetak / Simpan PDF: Buku Register Kendali Arsip Dokumen SPJ BOSP
+ */
+export function printArsipRegister(
+  school: SchoolProfile,
+  documents: SpjDocument[]
+): void {
+  const totalNilai = documents.reduce((acc, d) => acc + d.jumlah, 0);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>BUKU_KENDALI_ARSIP_SPJ_${school.tahunAnggaran}</title>
+        <style>
+          ${getPrintStyles('landscape')}
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 12pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              BUKU REGISTER & KENDALI ARSIP DOKUMEN SPJ BOSP
+            </h2>
+            <div style="font-size: 9.5pt; color: #555;">Tahun Anggaran ${school.tahunAnggaran} • Total Terarsip: ${documents.length} Berkas</div>
+          </div>
+
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 8.5pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center; width: 25pt;">No</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center; width: 65pt;">Tanggal</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left; width: 130pt;">Nomor Berkas</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center; width: 55pt;">Jenis SPJ</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left; width: 110pt;">Penerima / Rekanan</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: left;">Uraian Pembayaran</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: center; width: 35pt;">TW</th>
+                <th style="border: 0.5pt solid #333; padding: 4pt; text-align: right; width: 85pt;">Jumlah (Rp)</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${documents.map((doc, idx) => `
+                <tr>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center;">${idx + 1}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center;">${doc.tanggal}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; font-family: monospace; font-weight: bold;">${doc.nomor}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center; text-transform: uppercase;">${doc.type}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt;">${doc.penerima}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt;">${doc.uraian}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: center; font-weight: bold;">${doc.triwulan}</td>
+                  <td style="border: 0.5pt solid #333; padding: 3pt; text-align: right; font-weight: bold;">${formatRp(doc.jumlah)}</td>
+                </tr>
+              `).join('')}
+              ${documents.length === 0 ? '<tr><td colspan="8" style="border: 0.5pt solid #333; padding: 10pt; text-align: center; color: #888;">Belum ada dokumen SPJ yang terarsip.</td></tr>' : ''}
+              <tr style="background: #f8fafc; font-weight: bold;">
+                <td colspan="7" style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">TOTAL REGISTER ARSIP DOKUMEN SPJ</td>
+                <td style="border: 0.5pt solid #333; padding: 4pt; text-align: right; color: #1b5e20;">${formatRp(totalNilai)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="grid-signatures" style="margin-top: 14pt;">
+            <div class="sig-col">
+              <div>Mengetahui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 35pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Petugas Pengelola Arsip / Bendahara</div>
+              <div class="sig-space" style="height: 35pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `BUKU_KENDALI_ARSIP_SPJ_${school.tahunAnggaran}`);
+}
+
+/**
+ * 5. Cetak / Simpan PDF: Profil Satuan Pendidikan & SK Penetapan Tim Manajemen BOSP
+ */
+export function printSchoolProfile(school: SchoolProfile): void {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>PROFIL_SATUAN_PENDIDIKAN_${school.npsn}</title>
+        <style>
+          ${getPrintStyles('portrait')}
+          .prof-table td { padding: 5pt 8pt; border-bottom: 0.5pt solid #eee; font-size: 9.5pt; }
+          .lbl { font-weight: bold; width: 160pt; color: #333; }
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 16pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              LEMBAR IDENTITAS SATUAN PENDIDIKAN & TIM PENGELOLA DANA BOSP
+            </h2>
+            <div style="font-size: 10pt; color: #555; margin-top: 3pt;">Tahun Anggaran ${school.tahunAnggaran}</div>
+          </div>
+
+          <div style="font-size: 10.5pt; font-weight: bold; margin-bottom: 6pt; border-bottom: 1.5pt solid #5A5A40; padding-bottom: 2pt;">
+            I. IDENTITAS SATUAN PENDIDIKAN
+          </div>
+          <table class="prof-table" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt;">
+            <tr><td class="lbl">Nama Satuan Pendidikan</td><td style="font-weight: bold;">${school.nama}</td></tr>
+            <tr><td class="lbl">Nomor Pokok Sekolah Nasional (NPSN)</td><td>${school.npsn}</td></tr>
+            <tr><td class="lbl">Alamat Lengkap</td><td>${school.alamat}</td></tr>
+            <tr><td class="lbl">Kabupaten / Provinsi</td><td>Kabupaten Jayapura, Provinsi Papua</td></tr>
+            <tr><td class="lbl">Tahun Anggaran Operasional</td><td>${school.tahunAnggaran}</td></tr>
+            <tr><td class="lbl">Nomor Rekening Kas Sekolah</td><td>${school.bankRek ? `${school.bankRek} (${school.bankNama} an. ${school.bankAtasNama})` : '101.02.01.00293-8 (Bank Papua Cabang Sentani)'}</td></tr>
+          </table>
+
+          <div style="font-size: 10.5pt; font-weight: bold; margin-bottom: 6pt; border-bottom: 1.5pt solid #5A5A40; padding-bottom: 2pt;">
+            II. PEJABAT PENGELOLA & PENANGGUNG JAWAB DANA BOSP
+          </div>
+          <table class="prof-table" style="width: 100%; border-collapse: collapse; margin-bottom: 20pt;">
+            <tr><td class="lbl">Kepala Sekolah (Penanggung Jawab)</td><td style="font-weight: bold;">${school.kepsekNama}</td></tr>
+            <tr><td class="lbl">NIP Kepala Sekolah</td><td>${school.kepsekNip}</td></tr>
+            <tr><td class="lbl">Jabatan</td><td>Kepala Sekolah / Kuasa Pengguna Anggaran BOSP</td></tr>
+            <tr><td class="lbl">Bendahara BOSP (Pengelola Keuangan)</td><td style="font-weight: bold;">${school.bendaharaNama}</td></tr>
+            <tr><td class="lbl">NIP Bendahara</td><td>${school.bendaharaNip}</td></tr>
+            <tr><td class="lbl">Jabatan</td><td>Bendahara Dana BOSP SMP Negeri 7 Sentani</td></tr>
+          </table>
+
+          <div class="grid-signatures" style="margin-top: 24pt;">
+            <div class="sig-col">
+              <div>Mengetahui / Mengesahkan,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 45pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Bendahara BOSP</div>
+              <div class="sig-space" style="height: 45pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `PROFIL_SATUAN_PENDIDIKAN_${school.npsn}`);
+}
+
+/**
+ * 6. Cetak / Simpan PDF: Lembar Pengguna & Otoritas Sistem
+ */
+export function printUserAccounts(school: SchoolProfile, users: any[]): void {
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>DAFTAR_PENGGUNA_SISTEM_BOSP</title>
+        <style>
+          ${getPrintStyles('portrait')}
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 16pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              DAFTAR AKUN PENGGUNA & HAK AKSES OTORITAS SISTEM SIBOS
+            </h2>
+            <div style="font-size: 10pt; color: #555; margin-top: 3pt;">Satuan Pendidikan: ${school.nama}</div>
+          </div>
+
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 30pt;">No</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: left;">Nama Pejabat / Pengguna</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: left;">NIP</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 75pt;">Username</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 85pt;">Role / Hak Akses</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 65pt;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${users.map((u, idx) => `
+                <tr>
+                  <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center;">${idx + 1}</td>
+                  <td style="border: 0.5pt solid #333; padding: 4pt; font-weight: bold;">${u.nama}</td>
+                  <td style="border: 0.5pt solid #333; padding: 4pt;">${u.nip || '-'}</td>
+                  <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; font-family: monospace;">${u.username}</td>
+                  <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; font-weight: bold;">${u.role}</td>
+                  <td style="border: 0.5pt solid #333; padding: 4pt; text-align: center; color: #047857; font-weight: bold;">${u.isActive ? 'AKTIF' : 'NONAKTIF'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="grid-signatures" style="margin-top: 24pt;">
+            <div class="sig-col">
+              <div>Mengetahui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, ${formatTanggalIndo(new Date().toISOString().split('T')[0])}</div>
+              <div class="font-bold">Administrator Sistem SIBOS</div>
+              <div class="sig-space" style="height: 40pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, 'DAFTAR_PENGGUNA_SISTEM_BOSP');
+}
+
+/**
+ * 7. Cetak / Simpan PDF: Rekapitulasi 8 Standar Murni
+ */
+export function printRekapMurni(
+  school: SchoolProfile,
+  worksheets: MonthWorksheet[]
+): void {
+  const temaTotals: Record<string, number> = {};
+  worksheets.forEach((ws) => {
+    ws.items.forEach((it) => {
+      const tid = it.temaId || '06';
+      temaTotals[tid] = (temaTotals[tid] || 0) + it.jumlah;
+    });
+  });
+
+  const grandTotal = Object.values(temaTotals).reduce((a, b) => a + b, 0);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta charset="utf-8">
+        <title>REKAPITULASI_8_STANDAR_MURNI_${school.tahunAnggaran}</title>
+        <style>
+          ${getPrintStyles('portrait')}
+        </style>
+      </head>
+      <body>
+        <div class="page-container">
+          <div class="header-kop">
+            <div class="logo-container">${getSchoolLogoSvg(school)}</div>
+            <div class="kop-text">
+              <div class="instansi">PEMERINTAH KABUPATEN JAYAPURA</div>
+              <div class="dinas">DINAS PENDIDIKAN DAN KEBUDAYAAN</div>
+              <div class="sekolah">${school.nama.toUpperCase()}</div>
+              <div class="alamat">${school.alamat} • NPSN: ${school.npsn}</div>
+            </div>
+          </div>
+
+          <div class="text-center" style="margin-bottom: 14pt;">
+            <h2 style="font-size: 13pt; text-transform: uppercase; font-weight: bold; text-decoration: underline;">
+              REKAPITULASI ANGGARAN 8 STANDAR NASIONAL PENDIDIKAN (ARKAS MURNI)
+            </h2>
+            <div style="font-size: 10pt; color: #555; margin-top: 2pt;">
+              Tahun Anggaran ${school.tahunAnggaran} • Satuan Pendidikan: ${school.nama}
+            </div>
+          </div>
+
+          <table class="table-doc" style="width: 100%; border-collapse: collapse; margin-bottom: 16pt; font-size: 9pt;">
+            <thead>
+              <tr style="background: #eef2f5;">
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 35pt;">Kode</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: left;">Standar Nasional Pendidikan (SNP)</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: right; width: 120pt;">Total Anggaran Murni (Rp)</th>
+                <th style="border: 0.5pt solid #333; padding: 5pt; text-align: center; width: 65pt;">Persentase</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${TEMA_STANDAR_LIST.map((t) => {
+                const tot = temaTotals[t.kode] || 0;
+                const pct = grandTotal > 0 ? ((tot / grandTotal) * 100).toFixed(1) : '0';
+                return `
+                  <tr>
+                    <td style="border: 0.5pt solid #333; padding: 4.5pt; text-align: center; font-weight: bold;">${t.kode}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4.5pt;">${t.nama}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4.5pt; text-align: right; font-weight: bold;">${formatRp(tot)}</td>
+                    <td style="border: 0.5pt solid #333; padding: 4.5pt; text-align: center;">${pct}%</td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr style="background: #f8fafc; font-weight: bold;">
+                <td colspan="2" style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">TOTAL BELANJA 8 SNP (MURNI)</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: right; color: #1b5e20;">${formatRp(grandTotal)}</td>
+                <td style="border: 0.5pt solid #333; padding: 5pt; text-align: center;">100%</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="grid-signatures" style="margin-top: 18pt;">
+            <div class="sig-col">
+              <div>Mengetahui,</div>
+              <div class="font-bold">Kepala Sekolah</div>
+              <div class="sig-space" style="height: 38pt;"></div>
+              <div class="sig-name">${school.kepsekNama}</div>
+              <div>NIP. ${school.kepsekNip}</div>
+            </div>
+            <div class="sig-col"></div>
+            <div class="sig-col">
+              <div>Sentani, 31 Desember ${school.tahunAnggaran}</div>
+              <div class="font-bold">Bendahara BOSP</div>
+              <div class="sig-space" style="height: 38pt;"></div>
+              <div class="sig-name">${school.bendaharaNama}</div>
+              <div>NIP. ${school.bendaharaNip}</div>
+            </div>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  printHtmlViaIframe(html, `REKAPITULASI_8_STANDAR_MURNI_${school.tahunAnggaran}`);
+}
+
 

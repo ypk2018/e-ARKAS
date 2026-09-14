@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { School, Save, RotateCcw, Building2, UserCheck, Landmark, Award, ShieldCheck, Lock } from 'lucide-react';
+import { School, Save, RotateCcw, Building2, UserCheck, Landmark, Award, ShieldCheck, Lock, Printer } from 'lucide-react';
 import { SchoolProfile, UserAccount } from '../types';
 import { DEFAULT_SCHOOL_PROFILE } from '../data/schoolProfile';
 import { formatRp } from '../utils/formatters';
 import { SchoolLogo } from './SchoolLogo';
+import { printSchoolProfile } from '../utils/printDocument';
 
 interface IdentitasViewProps {
   school: SchoolProfile;
@@ -64,32 +65,45 @@ export const IdentitasView: React.FC<IdentitasViewProps> = ({ school, onUpdateSc
           </div>
         </div>
 
-        {isKepsek ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              id="btn-reset-identitas"
-              onClick={handleReset}
-              className="flex items-center gap-1 text-xs font-medium text-[#6B665E] hover:text-[#2C2A28] px-3.5 py-2.5 rounded-xl border border-[#E0DACE] hover:bg-[#F9F7F2] transition cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Reset Default</span>
-            </button>
-            <button
-              type="submit"
-              id="btn-save-identitas"
-              className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
-            >
-              <Save className="w-4 h-4" />
-              <span>Simpan Perubahan Identitas</span>
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-medium">
-            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
-            <span>Mode Baca (Hanya Master Admin / Kepala Sekolah yang Berwenang Mengubah)</span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            id="btn-print-school-profile"
+            onClick={() => printSchoolProfile(school)}
+            className="flex items-center gap-1.5 text-xs font-bold text-[#2C2A28] bg-[#FAF8F5] hover:bg-[#E8E2D6] px-3.5 py-2.5 rounded-xl border border-[#D9D1C2] transition shadow-2xs cursor-pointer"
+            title="Cetak atau Simpan PDF Profil Sekolah & Penetapan Pejabat BOSP"
+          >
+            <Printer className="w-4 h-4 text-[#5A5A40]" />
+            <span>Cetak / Simpan PDF</span>
+          </button>
+
+          {isKepsek ? (
+            <>
+              <button
+                type="button"
+                id="btn-reset-identitas"
+                onClick={handleReset}
+                className="flex items-center gap-1 text-xs font-medium text-[#6B665E] hover:text-[#2C2A28] px-3.5 py-2.5 rounded-xl border border-[#E0DACE] hover:bg-[#F9F7F2] transition cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Default</span>
+              </button>
+              <button
+                type="submit"
+                id="btn-save-identitas"
+                className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>Simpan Perubahan Identitas</span>
+              </button>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 px-3.5 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs font-medium">
+              <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>Mode Baca (Hanya Master Admin / Kepala Sekolah yang Berwenang Mengubah)</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Role Notice Banner */}

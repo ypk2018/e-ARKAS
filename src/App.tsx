@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { RefreshCw, CheckCircle2, X, ArrowLeftRight, Bell } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
@@ -13,6 +14,7 @@ import { LoginView } from './components/LoginView';
 import { PrintModal } from './components/PrintModal';
 import { ArkasPerubahanView } from './components/ArkasPerubahanView';
 import { RekapPerubahanView } from './components/RekapPerubahanView';
+import { ManualPerubahanView } from './components/ManualPerubahanView';
 
 import {
   SchoolProfile,
@@ -219,35 +221,23 @@ export function App() {
     mode: 'worksheet'
   });
 
-  // Save changes to LocalStorage and update auto-save timestamp
-  useEffect(() => {
-    localStorage.setItem(LS_USERS, JSON.stringify(users));
-    triggerAutoSaveIndicator();
-  }, [users]);
+  // Central Server Synchronization & Collaborative State
+  const [serverVersion, setServerVersion] = useState<number>(1);
+  const serverVersionRef = useRef<number>(1);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [syncPeer, setSyncPeer] = useState<string | null>(null);
+  const [liveAlert, setLiveAlert] = useState<{
+    id: number;
+    message: string;
+    actorName: string;
+    actorRole: string;
+    time: string;
+  } | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem(LS_SCHOOL, JSON.stringify(school));
-    triggerAutoSaveIndicator();
-  }, [school]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_WORKSHEETS, JSON.stringify(worksheets));
-    triggerAutoSaveIndicator();
-  }, [worksheets]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_PERUBAHAN, JSON.stringify(perubahanWorksheets));
-    triggerAutoSaveIndicator();
-  }, [perubahanWorksheets]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_DOCS, JSON.stringify(documents));
-    triggerAutoSaveIndicator();
-  }, [documents]);
-
-  useEffect(() => {
-    localStorage.setItem(LS_LOGS, JSON.stringify(activityLogs));
-  }, [activityLogs]);
+  // Guards to differentiate local user mutations from remote server updates
+  const isApplyingRemoteUpdateRef = useRef<boolean>(false);
+  const hasInitialLoadedRef = useRef<boolean>(false);
+  const saveDebounceTimerRef = useRef<any>(null);
 
   const triggerAutoSaveIndicator = () => {
     setIsAutoSaving(true);
@@ -260,7 +250,226 @@ export function App() {
     return () => clearTimeout(timer);
   };
 
-  // Real-time synchronization across browser tabs/windows (both Kepsek & Bendahara see updates live without refresh)
+  // Push full application state to the central server
+  const pushDataToServer = async (actionDescription?: string) => {
+    try {
+      setIsAutoSaving(true);
+      const payload = {
+        school,
+        worksheets,
+        perubahanWorksheets,
+        documents,
+        users,
+        activityLogs,
+        modifiedBy: {
+          userId: currentUser?.id,
+          nama: currentUser?.nama || (currentUser?.role === 'KEPSEK' ? 'Kepala Sekolah' : 'Bendahara BOSP'),
+          role: currentUser?.role || 'BENDAHARA',
+          action: actionDescription || 'Pembaruan data operasional BOSP'
+        }
+      };
+
+      const res = await fetch('/api/bosp-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (data.success && typeof data.version === 'number') {
+        serverVersionRef.current = data.version;
+        setServerVersion(data.version);
+        triggerAutoSaveIndicator();
+      }
+    } catch (err) {
+      console.warn('Gagal menyimpan otomatis ke server pusat:', err);
+    } finally {
+      setIsAutoSaving(false);
+    }
+  };
+
+  // 1. Initial Load: Ambil data mutakhir dari database server pusat saat aplikasi dibuka
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadInitialServerData = async () => {
+      try {
+        setIsSyncing(true);
+        const res = await fetch('/api/bosp-data');
+        const json = await res.json();
+
+        if (json.success && json.data) {
+          if (!isMounted) return;
+          isApplyingRemoteUpdateRef.current = true;
+
+          if (json.data.school) setSchool(json.data.school);
+          if (json.data.worksheets) setWorksheets(json.data.worksheets);
+          if (json.data.perubahanWorksheets) setPerubahanWorksheets(json.data.perubahanWorksheets);
+          if (json.data.documents) setDocuments(json.data.documents);
+          if (json.data.users) setUsers(json.data.users);
+          if (json.data.activityLogs) setActivityLogs(json.data.activityLogs);
+
+          if (typeof json.version === 'number') {
+            serverVersionRef.current = json.version;
+            setServerVersion(json.version);
+          }
+          if (json.lastModifiedBy) {
+            const roleLabel = json.lastModifiedBy.role === 'KEPSEK' ? 'Kepala Sekolah' : json.lastModifiedBy.role === 'BENDAHARA' ? 'Bendahara' : json.lastModifiedBy.role;
+            setSyncPeer(`${json.lastModifiedBy.nama} (${roleLabel})`);
+          }
+
+          setTimeout(() => {
+            isApplyingRemoteUpdateRef.current = false;
+            hasInitialLoadedRef.current = true;
+          }, 350);
+        } else {
+          // Jika server masih kosong, inisialisasi server dengan data awal
+          hasInitialLoadedRef.current = true;
+          await pushDataToServer('Inisialisasi data awal BOSP 2026');
+        }
+      } catch (err) {
+        console.warn('Initial server fetch failed, fallback to local storage:', err);
+        hasInitialLoadedRef.current = true;
+      } finally {
+        if (isMounted) setIsSyncing(false);
+      }
+    };
+
+    loadInitialServerData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Auto-Save to LocalStorage & Debounced Push to Server whenever local user mutates state
+  useEffect(() => {
+    // Simpan ke local cache peramban sebagai backup cepat
+    localStorage.setItem(LS_USERS, JSON.stringify(users));
+    localStorage.setItem(LS_SCHOOL, JSON.stringify(school));
+    localStorage.setItem(LS_WORKSHEETS, JSON.stringify(worksheets));
+    localStorage.setItem(LS_PERUBAHAN, JSON.stringify(perubahanWorksheets));
+    localStorage.setItem(LS_DOCS, JSON.stringify(documents));
+    localStorage.setItem(LS_LOGS, JSON.stringify(activityLogs));
+    triggerAutoSaveIndicator();
+
+    // Jika perubahan datang dari sinkronisasi server (remote), jangan dipush ulang agar tidak looping
+    if (!hasInitialLoadedRef.current || isApplyingRemoteUpdateRef.current) {
+      return;
+    }
+
+    if (saveDebounceTimerRef.current) {
+      clearTimeout(saveDebounceTimerRef.current);
+    }
+
+    // Debounce save 550ms ke server
+    saveDebounceTimerRef.current = setTimeout(() => {
+      pushDataToServer();
+    }, 550);
+
+    return () => {
+      if (saveDebounceTimerRef.current) {
+        clearTimeout(saveDebounceTimerRef.current);
+      }
+    };
+  }, [users, school, worksheets, perubahanWorksheets, documents, activityLogs]);
+
+  // 3. Real-time Poller & Multi-user Listener: Mendeteksi perubahan dari pengguna lain (Kepsek <-> Bendahara)
+  const checkRemoteSync = async () => {
+    if (isApplyingRemoteUpdateRef.current) return;
+    try {
+      const res = await fetch('/api/bosp-data/status');
+      const json = await res.json();
+
+      if (json.success && typeof json.version === 'number') {
+        // Jika versi di server lebih tinggi daripada versi lokal kita, berarti ada perubahan dari lawan bicara
+        if (json.version > serverVersionRef.current) {
+          setIsSyncing(true);
+          const fullRes = await fetch('/api/bosp-data');
+          const fullJson = await fullRes.json();
+
+          if (fullJson.success && fullJson.data) {
+            isApplyingRemoteUpdateRef.current = true;
+            serverVersionRef.current = fullJson.version;
+            setServerVersion(fullJson.version);
+
+            if (fullJson.data.school) setSchool(fullJson.data.school);
+            if (fullJson.data.worksheets) setWorksheets(fullJson.data.worksheets);
+            if (fullJson.data.perubahanWorksheets) setPerubahanWorksheets(fullJson.data.perubahanWorksheets);
+            if (fullJson.data.documents) setDocuments(fullJson.data.documents);
+            if (fullJson.data.users) setUsers(fullJson.data.users);
+            if (fullJson.data.activityLogs) setActivityLogs(fullJson.data.activityLogs);
+
+            const modifier = fullJson.lastModifiedBy;
+            if (modifier) {
+              const roleTitle = modifier.role === 'KEPSEK' ? 'Kepala Sekolah' : modifier.role === 'BENDAHARA' ? 'Bendahara' : 'Pengguna Lain';
+              setSyncPeer(`${modifier.nama || roleTitle} (${roleTitle})`);
+
+              // Jika perubahan dibuat oleh akun selain akun saya saat ini, tampilkan notifikasi alert ramah
+              if (!currentUser || modifier.userId !== currentUser.id) {
+                const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                setLiveAlert({
+                  id: Date.now(),
+                  message: `Rincian belanja ARKAS Perubahan telah diperbarui otomatis oleh ${roleTitle} (${modifier.nama || ''}).`,
+                  actorName: modifier.nama || roleTitle,
+                  actorRole: roleTitle,
+                  time: nowTime
+                });
+              }
+            }
+
+            triggerAutoSaveIndicator();
+
+            setTimeout(() => {
+              isApplyingRemoteUpdateRef.current = false;
+            }, 300);
+          }
+          setIsSyncing(false);
+        }
+      }
+    } catch (e) {
+      // Ignored network retry
+    }
+  };
+
+  useEffect(() => {
+    // Polling setiap 2.5 detik
+    const interval = setInterval(checkRemoteSync, 2500);
+
+    // Langsung cek sinkronisasi saat jendela browser difokuskan kembali
+    const handleWindowFocus = () => {
+      checkRemoteSync();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleWindowFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleWindowFocus);
+    };
+  }, [currentUser]);
+
+  // Auto-dismiss live alert setelah 7 detik
+  useEffect(() => {
+    if (liveAlert) {
+      const timer = setTimeout(() => {
+        setLiveAlert(null);
+      }, 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [liveAlert]);
+
+  // Manual Trigger: Tombol klik langsung sinkron di navbar
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    await checkRemoteSync();
+    setTimeout(() => {
+      setIsSyncing(false);
+    }, 450);
+  };
+
+  // Sinkronisasi tab lokal dalam browser yang sama (StorageEvent)
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
       if (!e.newValue) return;
@@ -868,7 +1077,43 @@ export function App() {
             onOpenUserManagement={() => setCurrentTab('users')}
             lastSavedTime={lastSavedTime}
             isAutoSaving={isAutoSaving}
+            onManualSync={handleManualSync}
+            isSyncing={isSyncing}
+            syncPeer={syncPeer}
           />
+
+          {/* Live Collaborative Sync Alert Toast */}
+          {liveAlert && (
+            <div className="mx-6 mt-4 p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500 shadow-md flex items-start justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-200/70 px-2 py-0.5 rounded-md">
+                      ⚡ Sinkron Otomatis 2 Arah (Kepsek ↔ Bendahara)
+                    </span>
+                    <span className="text-[11px] text-emerald-700 font-medium">pk {liveAlert.time}</span>
+                  </div>
+                  <p className="text-xs font-semibold text-emerald-950 mt-1">
+                    {liveAlert.message}
+                  </p>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    Data di layar Anda telah terbarui secara otomatis dan selaras secara real-time.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLiveAlert(null)}
+                className="text-emerald-700 hover:text-emerald-900 p-1.5 rounded-lg hover:bg-emerald-100 transition cursor-pointer"
+                title="Tutup pemberitahuan"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {/* View Container */}
           <main className="flex-1 p-6 lg:p-8 max-w-7xl w-full mx-auto">
@@ -916,6 +1161,7 @@ export function App() {
                 onAddActivityLog={handleAddActivityLog}
                 currentUser={currentUser}
                 onNavigateToRekapPerubahan={() => setCurrentTab('rekap-perubahan')}
+                onNavigateToManualPerubahan={() => setCurrentTab('arkas-perubahan-manual')}
                 onSaveItem={(item, mIdx) => handleSavePerubahanItem(item, mIdx)}
                 onEditItem={(item, mIdx) => handleEditPerubahanItem(item, mIdx)}
                 onHilangkanItem={(item, mIdx, reason) => handleHilangkanPerubahanItem(item, mIdx, reason)}
@@ -942,6 +1188,20 @@ export function App() {
                 onHilangkanItem={(item, mIdx, reason) => handleHilangkanPerubahanItem(item, mIdx, reason)}
                 onMoveItem={(item, fromM, toM, reason) => handleMovePerubahanItem(item, fromM, toM, reason)}
                 onHapusTotalItem={(item, mIdx) => handleHapusTotalPerubahanItem(item, mIdx)}
+                currentUser={currentUser}
+              />
+            )}
+
+            {currentTab === 'arkas-perubahan-manual' && (
+              <ManualPerubahanView
+                school={school}
+                worksheets={perubahanWorksheets}
+                murniWorksheets={worksheets}
+                onUpdateWorksheet={handleUpdatePerubahanWorksheet}
+                onNavigateToPerubahan={(mIdx) => {
+                  if (typeof mIdx === 'number') setSelectedMonth(mIdx);
+                  setCurrentTab('arkas-perubahan');
+                }}
                 currentUser={currentUser}
               />
             )}

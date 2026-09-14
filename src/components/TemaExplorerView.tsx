@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
-import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight, Sparkles } from 'lucide-react';
-import { MonthWorksheet, KertasKerjaItem } from '../types';
+import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight, Sparkles, Printer } from 'lucide-react';
+import { MonthWorksheet, KertasKerjaItem, SchoolProfile } from '../types';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { formatRp } from '../utils/formatters';
-import { MONTH_NAMES } from '../data/schoolProfile';
+import { MONTH_NAMES, DEFAULT_SCHOOL_PROFILE } from '../data/schoolProfile';
+import { printTemaExplorer } from '../utils/printDocument';
 
 interface TemaExplorerViewProps {
   worksheets: MonthWorksheet[];
+  school?: SchoolProfile;
   onCreateSpjFromItem: (item: KertasKerjaItem, monthIndex: number) => void;
   onSelectMonthAndTab: (monthIndex: number, tab: string) => void;
 }
 
 export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
   worksheets,
+  school = DEFAULT_SCHOOL_PROFILE,
   onCreateSpjFromItem,
   onSelectMonthAndTab
 }) => {
@@ -78,15 +81,27 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
           </p>
         </div>
 
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-[#8C867E] absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari subtema / rincian / kode..."
-            value={searchFilter}
-            onChange={(e) => setSearchFilter(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
-          />
+        <div className="flex flex-col sm:flex-row items-center gap-3">
+          <button
+            id="btn-print-tema-explorer"
+            onClick={() => printTemaExplorer(school, worksheets)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-[#FAF8F5] hover:bg-[#E8E2D6] text-[#2C2A28] border border-[#D9D1C2] transition-colors shadow-2xs shrink-0 cursor-pointer"
+            title="Cetak atau Simpan PDF Matriks Pembagian 8 Standar Nasional Pendidikan"
+          >
+            <Printer className="w-4 h-4 text-[#5A5A40]" />
+            <span>Cetak / Simpan PDF</span>
+          </button>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-[#8C867E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Cari subtema / rincian / kode..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
+            />
+          </div>
         </div>
       </div>
 

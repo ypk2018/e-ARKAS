@@ -17,7 +17,8 @@ import {
   LogOut,
   ShieldCheck,
   UserCheck,
-  GitCompare
+  GitCompare,
+  PlusCircle
 } from 'lucide-react';
 import { SchoolProfile, UserAccount } from '../types';
 import { SchoolLogo } from './SchoolLogo';
@@ -46,8 +47,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     { id: 'dashboard', label: 'Beranda & Ringkasan', icon: LayoutDashboard, badge: '2026' },
     { id: 'kertas-kerja', label: 'Kertas Kerja Bulanan (Murni)', icon: TableProperties, highlight: true },
-    { id: 'arkas-perubahan', label: 'ARKAS PERUBAHAN', icon: GitCompare, badge: 'PERUBAHAN', badgeColor: 'bg-[#059669]' },
-    { id: 'rekap-perubahan', label: 'Rekap ARKAS Perubahan', icon: FileSpreadsheet, badge: 'REKAP', badgeColor: 'bg-[#047857]' },
+    { id: 'arkas-perubahan', label: 'ARKAS Perubahan (13 Kolom)', icon: GitCompare, badge: 'PERUBAHAN', badgeColor: 'bg-[#059669]' },
+    { id: 'arkas-perubahan-manual', label: '↳ Tambah Manual (Isi Kebutuhan)', icon: PlusCircle, badge: 'MANUAL', badgeColor: 'bg-[#059669]' },
+    { id: 'rekap-perubahan', label: '↳ Rekap & Selisih Perubahan', icon: FileSpreadsheet, badge: 'REKAP', badgeColor: 'bg-[#047857]' },
     { id: 'tema-explorer', label: 'Penjelajah Tema & Subtema', icon: Layers },
     { id: 'rekap', label: 'Rekapitulasi 8 Standar (Murni)', icon: FileSpreadsheet },
   ];

@@ -17,7 +17,8 @@ import {
   BarChart3,
   Flame,
   Activity,
-  GitCompare
+  GitCompare,
+  Printer
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -34,6 +35,7 @@ import { SchoolProfile, MonthWorksheet, SpjDocument, UserAccount, ArkasPerubahan
 import { formatRp } from '../utils/formatters';
 import { TEMA_STANDAR_LIST } from '../data/standarData';
 import { MONTH_NAMES } from '../data/schoolProfile';
+import { printDashboardSummary } from '../utils/printDocument';
 
 interface DashboardViewProps {
   school: SchoolProfile;
@@ -159,6 +161,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               <span>Kecamatan: <strong className="text-[#2C2A28]">{school.kecamatan}</strong></span>
               <span>•</span>
               <span>Kabupaten: <strong className="text-[#2C2A28]">{school.kabupaten}</strong></span>
+            </div>
+
+            <div className="pt-2">
+              <button
+                id="btn-print-dashboard-summary"
+                onClick={() => printDashboardSummary(school, worksheets, perubahanWorksheets || [], documents)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white hover:bg-[#E8E2D6] text-[#2C2A28] border border-[#D9D1C2] transition-colors shadow-2xs cursor-pointer"
+                title="Cetak atau Simpan PDF Laporan Ringkasan Eksekutif BOSP 2026"
+              >
+                <Printer className="w-4 h-4 text-[#5A5A40]" />
+                <span>Cetak / Simpan PDF Ringkasan Eksekutif</span>
+              </button>
             </div>
           </div>
 

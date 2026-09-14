@@ -461,13 +461,26 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            {onSelectMonthAndTab && (
+              <button
+                id="btn-nav-tambah-manual"
+                onClick={() => onSelectMonthAndTab(0, 'arkas-perubahan-manual')}
+                className="flex items-center gap-1.5 bg-[#059669] hover:bg-[#047857] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                title="Tambah Kegiatan Belanja Baru Secara Manual Sesuai Kebutuhan"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Tambah Belanja Manual</span>
+              </button>
+            )}
+
             <button
+              id="btn-print-rekap-perubahan"
               onClick={handlePrint}
               className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
               title="Cetak format cetak resmi A4 Landscape Laporan Rekapitulasi Perubahan Anggaran"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak Rekapan A4</span>
+              <span>Cetak / Simpan PDF Rekapan</span>
             </button>
 
             {onSelectMonthAndTab && (
@@ -476,7 +489,7 @@ export const RekapPerubahanView: React.FC<RekapPerubahanViewProps> = ({
                 className="flex items-center gap-1.5 bg-[#F9F7F2] hover:bg-[#F2EDE4] text-[#5C5852] font-semibold px-4 py-2.5 rounded-xl text-xs border border-[#E0DACE] transition cursor-pointer"
                 title="Buka Lembar Kerja Bulanan ARKAS Perubahan"
               >
-                <span>Ke Lembar Kerja Bulanan</span>
+                <span>Ke Lembar Kerja (13 Kolom)</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}

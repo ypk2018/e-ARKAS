@@ -500,6 +500,16 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
                 {formatRp(totalBelanjaBulan)}
               </div>
             </div>
+
+            <button
+              id="btn-print-kertas-kerja-bulan"
+              onClick={() => onPrintMonth(selectedMonth)}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold bg-[#5A5A40] hover:bg-[#484832] text-white shadow-xs transition active:scale-95 cursor-pointer shrink-0"
+              title="Cetak atau Simpan PDF Lembar Kerja Bulanan"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Cetak / Simpan PDF</span>
+            </button>
           </div>
         </div>
 

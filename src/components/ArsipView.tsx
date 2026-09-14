@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { SpjDocument, SpjType, SchoolProfile } from '../types';
 import { formatRp, formatTanggalIndo } from '../utils/formatters';
+import { printArsipRegister } from '../utils/printDocument';
 
 interface ArsipViewProps {
   documents: SpjDocument[];
@@ -92,6 +93,16 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            id="btn-print-arsip-register"
+            onClick={() => printArsipRegister(school, filteredDocs)}
+            className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+            title="Cetak atau Simpan PDF Buku Register Arsip SPJ"
+          >
+            <Printer className="w-4 h-4" />
+            <span>Cetak / Simpan PDF</span>
+          </button>
+
           <button
             onClick={handleExportCSV}
             className="flex items-center gap-1.5 bg-[#F9F7F2] hover:bg-[#F2EDE4] text-[#2C2A28] font-medium px-4 py-2.5 rounded-xl text-xs border border-[#E0DACE] transition cursor-pointer"

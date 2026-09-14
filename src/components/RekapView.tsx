@@ -57,11 +57,13 @@ export const RekapView: React.FC<RekapViewProps> = ({ school, worksheets }) => {
         </div>
 
         <button
+          id="btn-print-rekap-matriks"
           onClick={handlePrint}
           className="flex items-center gap-1.5 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+          title="Cetak atau Simpan PDF Matriks 8 Standar x 12 Bulan"
         >
           <Printer className="w-4 h-4" />
-          <span>Cetak Rekapitulasi</span>
+          <span>Cetak / Simpan PDF</span>
         </button>
       </div>
 
