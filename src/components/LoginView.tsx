@@ -45,8 +45,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
   // Change Password Modal state
   const [isChangeModalOpen, setIsChangeModalOpen] = useState(false);
   const [changeTargetRole, setChangeTargetRole] = useState<UserRole>('BENDAHARA');
-  const [newPwdInput, setNewPwdInput] = useState('bendahara2026');
-  const [confirmPwdInput, setConfirmPwdInput] = useState('bendahara2026');
+  const [newPwdInput, setNewPwdInput] = useState('bendaharaspenju');
+  const [confirmPwdInput, setConfirmPwdInput] = useState('bendaharaspenju');
   const [showModalPwd, setShowModalPwd] = useState(false);
   const [modalSuccessMsg, setModalSuccessMsg] = useState('');
   const [modalErrorMsg, setModalErrorMsg] = useState('');
@@ -69,7 +69,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const openChangePasswordModal = (role: UserRole) => {
     setChangeTargetRole(role);
     const target = role === 'KEPSEK' ? kepsekUser : bendaharaUser;
-    const defaultVal = role === 'KEPSEK' ? (target?.password || 'kepsek78') : (target?.password || 'bendahara2026');
+    const defaultVal = role === 'KEPSEK' ? (target?.password || 'kepsek78') : (target?.password || 'bendaharaspenju');
     setNewPwdInput(defaultVal);
     setConfirmPwdInput(defaultVal);
     setModalErrorMsg('');
@@ -149,7 +149,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       const trimmed = password.trim();
       const isValid =
         activeUser.password === trimmed ||
-        (activeUser.role === 'BENDAHARA' && (trimmed === 'bendahara2026' || trimmed === 'bendahara88'));
+        (activeUser.role === 'BENDAHARA' && (trimmed === 'bendaharaspenju' || trimmed === 'bendahara2026' || trimmed === 'bendahara88'));
 
       if (!isValid) {
         setErrorMessage(
@@ -187,7 +187,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         (u) =>
           (u.username.toLowerCase() === clean || u.nip === clean) &&
           (u.password === manualPassword.trim() ||
-            (u.role === 'BENDAHARA' && (manualPassword.trim() === 'bendahara2026' || manualPassword.trim() === 'bendahara88')))
+            (u.role === 'BENDAHARA' && (manualPassword.trim() === 'bendaharaspenju' || manualPassword.trim() === 'bendahara2026' || manualPassword.trim() === 'bendahara88')))
       );
 
       if (!matched) {
@@ -620,6 +620,16 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   Rekomendasi kata sandi cepat:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewPwdInput('bendaharaspenju');
+                      setConfirmPwdInput('bendaharaspenju');
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] transition cursor-pointer font-bold"
+                  >
+                    bendaharaspenju
+                  </button>
                   <button
                     type="button"
                     onClick={() => {

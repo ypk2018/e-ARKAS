@@ -18,7 +18,7 @@ export const INITIAL_USERS: UserAccount[] = [
   {
     id: 'user_bendahara_01',
     username: 'bendahara',
-    password: 'bendahara2026',
+    password: 'bendaharaspenju',
     nama: 'Rahel Natalia Done,S.Pd.K',
     nip: '198812272024212036',
     jabatan: 'Bendahara BOSP',

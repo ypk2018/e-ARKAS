@@ -47,7 +47,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   // Forms state
   const [bendaharaForm, setBendaharaForm] = useState({
     username: bendaharaUser?.username || 'bendahara',
-    password: bendaharaUser?.password || 'bendahara2026',
+    password: bendaharaUser?.password || 'bendaharaspenju',
     nama: bendaharaUser?.nama || school.bendaharaNama,
     nip: bendaharaUser?.nip || school.bendaharaNip,
     pangkat: bendaharaUser?.pangkat || 'Penata Muda / III a',
@@ -72,8 +72,8 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
 
   // Bendahara self-service password state
-  const [bendaharaSelfPwd, setBendaharaSelfPwd] = useState(bendaharaUser?.password || 'bendahara2026');
-  const [bendaharaSelfConfirmPwd, setBendaharaSelfConfirmPwd] = useState(bendaharaUser?.password || 'bendahara2026');
+  const [bendaharaSelfPwd, setBendaharaSelfPwd] = useState(bendaharaUser?.password || 'bendaharaspenju');
+  const [bendaharaSelfConfirmPwd, setBendaharaSelfConfirmPwd] = useState(bendaharaUser?.password || 'bendaharaspenju');
   const [showBendaharaSelfPwd, setShowBendaharaSelfPwd] = useState(false);
   const [selfPwdError, setSelfPwdError] = useState('');
 
@@ -360,22 +360,22 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
+                    setBendaharaSelfPwd('bendaharaspenju');
+                    setBendaharaSelfConfirmPwd('bendaharaspenju');
+                  }}
+                  className="px-2 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] cursor-pointer font-bold"
+                >
+                  bendaharaspenju
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setBendaharaSelfPwd('bendahara2026');
                     setBendaharaSelfConfirmPwd('bendahara2026');
                   }}
                   className="px-2 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] cursor-pointer"
                 >
                   bendahara2026
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setBendaharaSelfPwd('bendahara88');
-                    setBendaharaSelfConfirmPwd('bendahara88');
-                  }}
-                  className="px-2 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] cursor-pointer"
-                >
-                  bendahara88
                 </button>
               </div>
 
@@ -513,17 +513,17 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                       <span className="text-[10px] text-[#8C867E]">Preset cepat:</span>
                       <button
                         type="button"
+                        onClick={() => setBendaharaForm({ ...bendaharaForm, password: 'bendaharaspenju' })}
+                        className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] rounded text-[#2C2A28] cursor-pointer font-bold"
+                      >
+                        bendaharaspenju
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setBendaharaForm({ ...bendaharaForm, password: 'bendahara2026' })}
                         className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] rounded text-[#2C2A28] cursor-pointer"
                       >
                         bendahara2026
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setBendaharaForm({ ...bendaharaForm, password: 'bendahara88' })}
-                        className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] rounded text-[#2C2A28] cursor-pointer"
-                      >
-                        bendahara88
                       </button>
                     </div>
                   </div>
