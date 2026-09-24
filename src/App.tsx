@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RefreshCw, CheckCircle2, X, ArrowLeftRight, Bell } from 'lucide-react';
+import { RefreshCw, CheckCircle2, X, ArrowLeftRight, Bell, KeyRound, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { Sidebar } from './components/Sidebar';
 import { Navbar } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
@@ -62,7 +62,7 @@ export function App() {
             return {
               ...u,
               nip: (!u.nip || u.nip === '198812272024202136') ? '198812272024212036' : u.nip,
-              password: (!u.password || u.password === 'bendahara77' || u.password === 'bendahara88' || u.password === 'bendahara2026') ? 'bendaharaspenju' : u.password
+              password: (!u.password || u.password === 'bendahara77' || u.password === 'bendahara88' || u.password === 'bendahara2026') ? 'bendaharaspenju2026' : u.password
             };
           }
           return u;
@@ -191,6 +191,36 @@ export function App() {
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState<number>(0);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  const [isSpjUnlocked, setIsSpjUnlocked] = useState<boolean>(currentUser?.role === 'KEPSEK');
+  const [isSpjPasswordModalOpen, setIsSpjPasswordModalOpen] = useState<boolean>(false);
+  const [spjPasswordInput, setSpjPasswordInput] = useState<string>('');
+  const [spjPasswordError, setSpjPasswordError] = useState<string>('');
+  const [showSpjModalPwd, setShowSpjModalPwd] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (currentUser?.role === 'KEPSEK') {
+      setIsSpjUnlocked(true);
+    } else {
+      setIsSpjUnlocked(false);
+    }
+  }, [currentUser]);
+
+  const handleUnlockSpj = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSpjPasswordError('');
+
+    const bendaharaAccount = users.find((u) => u.role === 'BENDAHARA');
+    const correctPassword = bendaharaAccount?.password || 'bendaharaspenju';
+
+    if (spjPasswordInput.trim() === correctPassword) {
+      setIsSpjUnlocked(true);
+      setIsSpjPasswordModalOpen(false);
+      setSpjPasswordInput('');
+    } else {
+      setSpjPasswordError('Kata sandi salah. Masukkan kata sandi Bendahara yang telah diatur oleh Kepala Sekolah.');
+    }
+  };
 
   // Draft document state for SPJ view
   const [draftDoc, setDraftDoc] = useState<SpjDocument>(() => ({
@@ -523,6 +553,11 @@ export function App() {
 
   // Tab switcher with draft init
   const handleSelectTab = (tab: string) => {
+    const spjTabs = ['kwitansi', 'daftar', 'nota', 'faktur', 'bkk', 'berita', 'sptj', 'arsip'];
+    if (currentUser?.role === 'BENDAHARA' && spjTabs.includes(tab) && !isSpjUnlocked) {
+      setIsSpjPasswordModalOpen(true);
+      return;
+    }
     setCurrentTab(tab);
     if (['kwitansi', 'daftar', 'nota', 'faktur', 'bkk', 'berita', 'sptj'].includes(tab)) {
       const type = tab as SpjType;
@@ -550,6 +585,10 @@ export function App() {
 
   // 1-Click Create SPJ from Item in Kertas Kerja / Tema Explorer
   const handleCreateSpjFromItem = (item: KertasKerjaItem, monthIndex: number) => {
+    if (currentUser?.role === 'BENDAHARA' && !isSpjUnlocked) {
+      setIsSpjPasswordModalOpen(true);
+      return;
+    }
     const isHonor = item.uraian.toLowerCase().includes('honor') || item.uraian.toLowerCase().includes('gtt') || item.uraian.toLowerCase().includes('ptt');
     const type: SpjType = isHonor ? 'daftar' : 'kwitansi';
 
@@ -615,11 +654,19 @@ export function App() {
   };
 
   const handleOpenDocument = (doc: SpjDocument) => {
+    if (currentUser?.role === 'BENDAHARA' && !isSpjUnlocked) {
+      setIsSpjPasswordModalOpen(true);
+      return;
+    }
     setDraftDoc(doc);
     setCurrentTab(doc.type);
   };
 
   const handlePrintDocument = (doc: SpjDocument) => {
+    if (currentUser?.role === 'BENDAHARA' && !isSpjUnlocked) {
+      setIsSpjPasswordModalOpen(true);
+      return;
+    }
     setPrintModal({
       isOpen: true,
       mode: 'document',
@@ -1282,6 +1329,96 @@ export function App() {
           monthIndex={printModal.monthIndex}
           onClose={() => setPrintModal({ ...printModal, isOpen: false })}
         />
+      )}
+
+      {/* Modal Dialog: Password Akses SPJ untuk Bendahara */}
+      {isSpjPasswordModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full border border-[#E0DACE] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-5 flex items-center justify-between border-b bg-[#C06E52]/10 border-[#C06E52]/20">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white bg-[#C06E52]">
+                  <KeyRound className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-[#2C2A28]">
+                    Otorisasi Akses Dokumen SPJ
+                  </h3>
+                  <p className="text-[10px] text-[#6B665E]">
+                    Masukkan kata sandi Bendahara yang dibuat oleh Kepala Sekolah
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSpjPasswordModalOpen(false)}
+                className="text-[#8C867E] hover:text-[#2C2A28] p-1.5 rounded-lg hover:bg-black/5 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUnlockSpj} className="p-6 space-y-4 text-xs">
+              <div className="bg-[#FAF8F5] p-3.5 rounded-2xl border border-[#E0DACE]">
+                <div className="text-[10px] uppercase font-bold text-[#8C867E] tracking-wider mb-1">
+                  Keamanan Dokumen Keuangan BOSP
+                </div>
+                <p className="text-xs text-[#6B665E] leading-relaxed">
+                  Untuk membuka dan mengelola dokumen SPJ (Kwitansi, Daftar Honor, Nota, SPTJ, dan Arsip), Anda wajib memasukkan kata sandi Bendahara yang telah diatur oleh Kepala Sekolah.
+                </p>
+              </div>
+
+              {spjPasswordError && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center gap-2 text-rose-800 text-xs font-semibold">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  <span>{spjPasswordError}</span>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-semibold text-[#2C2A28] mb-1">
+                  Kata Sandi Bendahara (Dibuat oleh Kepsek):
+                </label>
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-[#8C867E] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type={showSpjModalPwd ? 'text' : 'password'}
+                    value={spjPasswordInput}
+                    onChange={(e) => setSpjPasswordInput(e.target.value)}
+                    placeholder="Masukkan kata sandi..."
+                    className="w-full pl-9 pr-9 py-2.5 bg-[#FAF8F5] border border-[#E0DACE] rounded-xl font-mono text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C06E52]/20 focus:border-[#C06E52]"
+                    required
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSpjModalPwd(!showSpjModalPwd)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8C867E] hover:text-[#2C2A28] cursor-pointer"
+                  >
+                    {showSpjModalPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-[#E0DACE] flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSpjPasswordModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-[#D9D1C2] bg-white text-[#5C5852] hover:bg-[#FAF8F5] font-semibold text-xs transition cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white font-semibold text-xs shadow-xs bg-[#C06E52] hover:bg-[#A85B42] transition active:scale-95 cursor-pointer"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Buka Semua Dokumen SPJ</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

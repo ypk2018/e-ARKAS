@@ -77,7 +77,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       const trimmed = password.trim();
       const isValid =
         activeUser.password === trimmed ||
-        (activeUser.role === 'BENDAHARA' && (trimmed === 'bendaharaspenju' || trimmed === 'bendahara2026' || trimmed === 'bendahara88'));
+        (activeUser.role === 'BENDAHARA' && (trimmed === 'bendaharaspenju' || trimmed === 'bendaharaspenju2026'));
 
       if (!isValid) {
         setErrorMessage(
@@ -115,7 +115,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
         (u) =>
           (u.username.toLowerCase() === clean || u.nip === clean) &&
           (u.password === manualPassword.trim() ||
-            (u.role === 'BENDAHARA' && (manualPassword.trim() === 'bendaharaspenju' || manualPassword.trim() === 'bendahara2026' || manualPassword.trim() === 'bendahara88')))
+            (u.role === 'BENDAHARA' && (manualPassword.trim() === 'bendaharaspenju' || manualPassword.trim() === 'bendaharaspenju2026')))
       );
 
       if (!matched) {
