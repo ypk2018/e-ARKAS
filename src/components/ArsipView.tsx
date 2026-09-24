@@ -33,20 +33,49 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterSource, setFilterSource] = useState<string>('all');
+  const [filterTriwulan, setFilterTriwulan] = useState<string>('all');
+  const [filterKomponen, setFilterKomponen] = useState<string>('all');
+
+  const standardKomponenList = [
+    'Pengembangan Standar Proses',
+    'Pemeliharaan Sarana dan Prasarana Sekolah',
+    'Penyediaan Alat Pembelajaran',
+    'Pelaksanaan Administrasi Kegiatan Sekolah',
+    'Pengembangan Pendidik dan Tenaga Kependidikan',
+    'Langganan Daya dan Jasa',
+    'Pembayaran Honor'
+  ];
+
+  const uniqueKomponenList = useMemo(() => {
+    const set = new Set<string>(standardKomponenList);
+    documents.forEach((d) => {
+      if (d.komponen) set.add(d.komponen);
+      else if (d.jenis) set.add(d.jenis);
+      else if (d.temaKode) set.add(d.temaKode);
+    });
+    return Array.from(set);
+  }, [documents]);
 
   const filteredDocs = useMemo(() => {
     return documents.filter((d) => {
       if (filterType !== 'all' && d.type !== filterType) return false;
       if (filterSource === 'murni' && d.sourceArkasType === 'perubahan') return false;
       if (filterSource === 'perubahan' && d.sourceArkasType !== 'perubahan') return false;
+      if (filterTriwulan !== 'all' && d.triwulan !== filterTriwulan) return false;
+      if (
+        filterKomponen !== 'all' &&
+        d.komponen !== filterKomponen &&
+        d.jenis !== filterKomponen &&
+        d.temaKode !== filterKomponen
+      ) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
-        const blob = `${d.nomor} ${d.penerima} ${d.uraian || ''} ${d.kegiatan || ''} ${d.tokoNama || ''}`.toLowerCase();
+        const blob = `${d.nomor} ${d.penerima} ${d.uraian || ''} ${d.kegiatan || ''} ${d.tokoNama || ''} ${d.komponen || ''}`.toLowerCase();
         if (!blob.includes(q)) return false;
       }
       return true;
     });
-  }, [documents, filterType, filterSource, search]);
+  }, [documents, filterType, filterSource, filterTriwulan, filterKomponen, search]);
 
   const totalArsip = filteredDocs.reduce((s, d) => s + (d.jumlah || 0), 0);
 
@@ -126,8 +155,33 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto flex-wrap">
           <Filter className="w-3.5 h-3.5 text-[#8C867E] shrink-0" />
+          <select
+            value={filterTriwulan}
+            onChange={(e) => setFilterTriwulan(e.target.value)}
+            className="bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs font-semibold px-3 py-2 text-[#2C2A28] focus:outline-none"
+          >
+            <option value="all">Semua Triwulan</option>
+            <option value="I">Triwulan I</option>
+            <option value="II">Triwulan II</option>
+            <option value="III">Triwulan III</option>
+            <option value="IV">Triwulan IV</option>
+          </select>
+
+          <select
+            value={filterKomponen}
+            onChange={(e) => setFilterKomponen(e.target.value)}
+            className="bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs font-semibold px-3 py-2 text-[#2C2A28] focus:outline-none max-w-[200px]"
+          >
+            <option value="all">Semua Kategori Standar</option>
+            {uniqueKomponenList.map((comp) => (
+              <option key={comp} value={comp}>
+                {comp}
+              </option>
+            ))}
+          </select>
+
           <select
             value={filterSource}
             onChange={(e) => setFilterSource(e.target.value)}
@@ -190,15 +244,22 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                         <span className="text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full bg-[#E8E2D6] text-[#2C2A28]">
                           {doc.type}
                         </span>
-                        {doc.sourceArkasType === 'perubahan' ? (
-                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            ARKAS Perubahan
-                          </span>
-                        ) : (
-                          <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-gray-100 text-gray-600">
-                            ARKAS Murni
-                          </span>
-                        )}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {doc.triwulan && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 border border-amber-300">
+                              TW {doc.triwulan}
+                            </span>
+                          )}
+                          {doc.sourceArkasType === 'perubahan' ? (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              Perubahan
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-medium px-1.5 py-0.2 rounded bg-gray-100 text-gray-600">
+                              Murni
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td className="py-3 px-4 font-mono font-bold text-[#2C2A28]">
