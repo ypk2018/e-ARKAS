@@ -8,6 +8,7 @@ import {
   Save,
   CheckCircle2,
   AlertTriangle,
+  AlertCircle,
   RotateCcw,
   Eye,
   EyeOff,
@@ -46,7 +47,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   // Forms state
   const [bendaharaForm, setBendaharaForm] = useState({
     username: bendaharaUser?.username || 'bendahara',
-    password: bendaharaUser?.password || 'bendahara88',
+    password: bendaharaUser?.password || 'bendahara2026',
     nama: bendaharaUser?.nama || school.bendaharaNama,
     nip: bendaharaUser?.nip || school.bendaharaNip,
     pangkat: bendaharaUser?.pangkat || 'Penata Muda / III a',
@@ -69,6 +70,46 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [showBendaharaPwd, setShowBendaharaPwd] = useState(false);
   const [showKepsekPwd, setShowKepsekPwd] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Bendahara self-service password state
+  const [bendaharaSelfPwd, setBendaharaSelfPwd] = useState(bendaharaUser?.password || 'bendahara2026');
+  const [bendaharaSelfConfirmPwd, setBendaharaSelfConfirmPwd] = useState(bendaharaUser?.password || 'bendahara2026');
+  const [showBendaharaSelfPwd, setShowBendaharaSelfPwd] = useState(false);
+  const [selfPwdError, setSelfPwdError] = useState('');
+
+  const handleSaveBendaharaSelfPassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSelfPwdError('');
+
+    if (!bendaharaSelfPwd.trim()) {
+      setSelfPwdError('Kata sandi baru tidak boleh kosong.');
+      return;
+    }
+
+    if (bendaharaSelfPwd.trim().length < 4) {
+      setSelfPwdError('Kata sandi baru minimal 4 karakter.');
+      return;
+    }
+
+    if (bendaharaSelfPwd.trim() !== bendaharaSelfConfirmPwd.trim()) {
+      setSelfPwdError('Konfirmasi kata sandi tidak cocok. Harap periksa kembali.');
+      return;
+    }
+
+    const updatedUsers = users.map((u) => {
+      if (u.role === 'BENDAHARA') {
+        return {
+          ...u,
+          password: bendaharaSelfPwd.trim()
+        };
+      }
+      return u;
+    });
+
+    onUpdateUsers(updatedUsers);
+    setSuccessMsg(`Kata sandi Bendahara berhasil diperbarui menjadi "${bendaharaSelfPwd.trim()}". Simpan dan gunakan kata sandi ini.`);
+    setTimeout(() => setSuccessMsg(''), 4500);
+  };
 
   // Handle Save Bendahara Account (Only Kepsek can execute)
   const handleSaveBendahara = (e: React.FormEvent) => {
@@ -244,6 +285,111 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Bendahara Self-Service Password Change Card */}
+          <div className="bg-white p-6 rounded-[28px] border-2 border-[#C06E52]/40 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-[#E0DACE] pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#C06E52]/10 text-[#C06E52] flex items-center justify-center">
+                  <KeyRound className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-sm text-[#2C2A28]">
+                    Ubah Kata Sandi Bendahara BOSP
+                  </h3>
+                  <p className="text-[10px] text-[#8C867E]">
+                    Perbarui kata sandi akun Bendahara Anda secara langsung
+                  </p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 bg-[#C06E52]/10 text-[#C06E52] rounded-md font-bold text-[10px]">
+                Akses Mandiri
+              </span>
+            </div>
+
+            {selfPwdError && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center gap-2 text-rose-800 text-xs">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{selfPwdError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveBendaharaSelfPassword} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-[#2C2A28] mb-1">
+                    Kata Sandi Baru:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showBendaharaSelfPwd ? 'text' : 'password'}
+                      value={bendaharaSelfPwd}
+                      onChange={(e) => setBendaharaSelfPwd(e.target.value)}
+                      placeholder="Minimal 4 karakter..."
+                      className="w-full pl-3.5 pr-10 py-2.5 bg-[#FAF8F5] border border-[#E0DACE] rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C06E52]/20 focus:border-[#C06E52]"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowBendaharaSelfPwd(!showBendaharaSelfPwd)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8C867E] hover:text-[#2C2A28] cursor-pointer"
+                    >
+                      {showBendaharaSelfPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-[#2C2A28] mb-1">
+                    Ulangi Kata Sandi Baru:
+                  </label>
+                  <input
+                    type={showBendaharaSelfPwd ? 'text' : 'password'}
+                    value={bendaharaSelfConfirmPwd}
+                    onChange={(e) => setBendaharaSelfConfirmPwd(e.target.value)}
+                    placeholder="Ketik ulang kata sandi baru..."
+                    className="w-full px-3.5 py-2.5 bg-[#FAF8F5] border border-[#E0DACE] rounded-xl text-xs font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C06E52]/20 focus:border-[#C06E52]"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-[#8C867E]">Preset cepat:</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBendaharaSelfPwd('bendahara2026');
+                    setBendaharaSelfConfirmPwd('bendahara2026');
+                  }}
+                  className="px-2 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] cursor-pointer"
+                >
+                  bendahara2026
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBendaharaSelfPwd('bendahara88');
+                    setBendaharaSelfConfirmPwd('bendahara88');
+                  }}
+                  className="px-2 py-0.5 rounded bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] font-mono text-[10px] text-[#2C2A28] cursor-pointer"
+                >
+                  bendahara88
+                </button>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  className="flex items-center gap-2 bg-[#C06E52] hover:bg-[#A85B42] text-white font-semibold px-4 py-2.5 rounded-xl text-xs shadow-xs transition active:scale-95 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Simpan Kata Sandi Baru Bendahara</span>
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       ) : (
         /* Full Administrative Control for Kepala Sekolah */
@@ -343,6 +489,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                   <div>
                     <label className="block font-semibold text-[#2C2A28] mb-1 flex items-center justify-between">
                       <span>Password Login</span>
+                      <span className="text-[10px] text-[#C06E52] font-semibold">Tersinkron otomatis</span>
                     </label>
                     <div className="relative">
                       <Lock className="w-3.5 h-3.5 text-[#8C867E] absolute left-3 top-1/2 -translate-y-1/2" />
@@ -359,6 +506,24 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C867E] hover:text-[#2C2A28] cursor-pointer"
                       >
                         {showBendaharaPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    {/* Quick Presets */}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <span className="text-[10px] text-[#8C867E]">Preset cepat:</span>
+                      <button
+                        type="button"
+                        onClick={() => setBendaharaForm({ ...bendaharaForm, password: 'bendahara2026' })}
+                        className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] rounded text-[#2C2A28] cursor-pointer"
+                      >
+                        bendahara2026
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBendaharaForm({ ...bendaharaForm, password: 'bendahara88' })}
+                        className="text-[10px] font-mono px-2 py-0.5 bg-[#FAF8F5] hover:bg-[#E8E2D6] border border-[#D9D1C2] rounded text-[#2C2A28] cursor-pointer"
+                      >
+                        bendahara88
                       </button>
                     </div>
                   </div>

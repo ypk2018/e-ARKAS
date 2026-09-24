@@ -50,7 +50,7 @@ export function App() {
     if (saved) {
       try {
         const parsed: UserAccount[] = JSON.parse(saved);
-        // Ensure updated default passwords kepsek78 & bendahara88 and updated NIP are applied
+        // Ensure updated default passwords kepsek78 & bendahara2026 and updated NIP are applied
         return parsed.map((u) => {
           if (u.role === 'KEPSEK') {
             return {
@@ -62,7 +62,7 @@ export function App() {
             return {
               ...u,
               nip: (!u.nip || u.nip === '198812272024202136') ? '198812272024212036' : u.nip,
-              password: (!u.password || u.password === 'bendahara77') ? 'bendahara88' : u.password
+              password: (!u.password || u.password === 'bendahara77' || u.password === 'bendahara88') ? 'bendahara2026' : u.password
             };
           }
           return u;
@@ -1024,7 +1024,14 @@ export function App() {
 
   // If user is not logged in, show login gateway
   if (!currentUser) {
-    return <LoginView school={school} users={users} onLogin={handleLogin} />;
+    return (
+      <LoginView
+        school={school}
+        users={users}
+        onLogin={handleLogin}
+        onUpdateUsers={handleUpdateUsers}
+      />
+    );
   }
 
   // KPI Calculations (Context-aware for ARKAS Murni vs ARKAS Perubahan)
