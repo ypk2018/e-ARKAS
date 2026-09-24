@@ -135,6 +135,77 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     return null;
   };
 
+  // Triwulan comparison data for Murni vs Perubahan
+  const triwulanComparisonData = React.useMemo(() => {
+    const twNames = ['Triwulan I (Jan-Mar)', 'Triwulan II (Apr-Jun)', 'Triwulan III (Jul-Sep)', 'Triwulan IV (Okt-Des)'];
+    return twNames.map((name, twIdx) => {
+      const startMonth = twIdx * 3;
+      const endMonth = startMonth + 3;
+
+      let murniTotal = 0;
+      for (let m = startMonth; m < endMonth; m++) {
+        if (worksheets[m]) {
+          murniTotal += worksheets[m].items.reduce((s, it) => s + it.jumlah, 0);
+        }
+      }
+
+      let perubahanTotal = 0;
+      if (perubahanWorksheets && perubahanWorksheets.length > 0) {
+        for (let m = startMonth; m < endMonth; m++) {
+          if (perubahanWorksheets[m]) {
+            perubahanTotal += perubahanWorksheets[m].items.reduce(
+              (s, it) => s + (it.statusPerubahan === 'DIHILANGKAN' ? 0 : it.jumlah),
+              0
+            );
+          }
+        }
+      } else {
+        perubahanTotal = murniTotal;
+      }
+
+      const selisih = perubahanTotal - murniTotal;
+
+      return {
+        triwulan: name,
+        shortName: `TW ${twIdx + 1}`,
+        murni: murniTotal,
+        perubahan: perubahanTotal,
+        selisih
+      };
+    });
+  }, [worksheets, perubahanWorksheets]);
+
+  const CustomComparisonTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-[#2C2A28] text-white p-3.5 rounded-2xl shadow-xl border border-[#484540] text-xs space-y-1.5 min-w-[220px]">
+          <div className="flex items-center justify-between border-b border-[#484540] pb-1.5 mb-1.5">
+            <span className="font-serif font-bold text-sm text-[#E0DACE]">{data.triwulan}</span>
+            <span className="text-[10px] bg-emerald-700 px-2 py-0.5 rounded-full font-mono text-white">
+              Perbandingan Murni vs Perubahan
+            </span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#A8A29E]">ARKAS Murni:</span>
+            <span className="font-bold text-white font-mono">{formatRp(data.murni)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-[#A8A29E]">ARKAS Perubahan:</span>
+            <span className="font-bold text-emerald-300 font-mono">{formatRp(data.perubahan)}</span>
+          </div>
+          <div className="flex items-center justify-between pt-1 border-t border-[#484540]">
+            <span className="text-[#A8A29E]">Selisih (Perubahan):</span>
+            <span className={`font-bold font-mono ${data.selisih > 0 ? 'text-emerald-400' : data.selisih < 0 ? 'text-red-400' : 'text-gray-300'}`}>
+              {data.selisih > 0 ? `+${formatRp(data.selisih)}` : formatRp(data.selisih)}
+            </span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <div className="space-y-6">
       {/* Hero Banner with Natural Tones aesthetic */}
@@ -234,6 +305,84 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </button>
         </div>
       )}
+
+      {/* Real-time Comparison Chart: Murni vs Perubahan Per Triwulan */}
+      <div className="bg-white p-6 md:p-7 rounded-[28px] border border-[#E0DACE] shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-[#F0EBE1]">
+          <div>
+            <div className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.2em] font-bold text-emerald-700 mb-1">
+              <GitCompare className="w-3.5 h-3.5" />
+              <span>Analisis Komparatif Real-Time</span>
+            </div>
+            <h3 className="text-lg font-serif font-bold text-[#2C2A28]">
+              Perbandingan Anggaran Murni vs ARKAS Perubahan Per Triwulan
+            </h3>
+            <p className="text-xs text-[#6B665E]">
+              Grafik komparasi alokasi belanja Triwulan I s.d. Triwulan IV antara Dokumen Murni dan Dokumen Perubahan
+            </p>
+          </div>
+          <div className="flex items-center gap-3 self-start sm:self-center">
+            <div className="flex items-center gap-1.5 text-xs text-[#5A5A40] font-medium bg-[#5A5A40]/10 px-3 py-1.5 rounded-xl border border-[#5A5A40]/20">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#5A5A40]"></span>
+              <span>ARKAS Murni</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-medium bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600"></span>
+              <span>ARKAS Perubahan</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Recharts Bar Chart Comparison */}
+        <div className="h-72 w-full pt-4">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={triwulanComparisonData}
+              margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#EAE4D8" vertical={false} />
+              <XAxis
+                dataKey="triwulan"
+                stroke="#8C867E"
+                fontSize={12}
+                tickLine={false}
+                axisLine={{ stroke: '#E0DACE' }}
+              />
+              <YAxis
+                stroke="#8C867E"
+                fontSize={11}
+                tickLine={false}
+                axisLine={{ stroke: '#E0DACE' }}
+                tickFormatter={(val) => `Rp ${(val / 1000000).toFixed(0)} jt`}
+              />
+              <Tooltip content={<CustomComparisonTooltip />} />
+              <Bar dataKey="murni" name="ARKAS Murni" fill="#5A5A40" radius={[6, 6, 0, 0]} barSize={32} />
+              <Bar dataKey="perubahan" name="ARKAS Perubahan" fill="#059669" radius={[6, 6, 0, 0]} barSize={32} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-2 text-xs">
+          {triwulanComparisonData.map((tw) => (
+            <div key={tw.shortName} className="p-3.5 bg-[#FAF8F5] rounded-2xl border border-[#E0DACE] space-y-1">
+              <div className="flex items-center justify-between font-serif font-bold text-[#2C2A28]">
+                <span>{tw.shortName}</span>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded ${tw.selisih > 0 ? 'bg-emerald-100 text-emerald-800' : tw.selisih < 0 ? 'bg-red-100 text-red-800' : 'bg-gray-100 text-gray-600'}`}>
+                  {tw.selisih > 0 ? `+${formatRp(tw.selisih)}` : tw.selisih < 0 ? formatRp(tw.selisih) : 'Tetap'}
+                </span>
+              </div>
+              <div className="flex justify-between text-[11px] text-[#6B665E]">
+                <span>Murni:</span>
+                <span className="font-mono font-medium">{formatRp(tw.murni)}</span>
+              </div>
+              <div className="flex justify-between text-[11px] text-emerald-800 font-semibold">
+                <span>Perubahan:</span>
+                <span className="font-mono">{formatRp(tw.perubahan)}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Budget Burn Rate Recharts Visualization */}
       <div className="bg-white p-6 md:p-7 rounded-[28px] border border-[#E0DACE] shadow-xs space-y-4">
