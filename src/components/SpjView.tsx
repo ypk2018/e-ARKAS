@@ -14,7 +14,14 @@ import {
   CheckCircle,
   Copy
 } from 'lucide-react';
-import { SpjDocument, SpjType, SchoolProfile, SpjItem } from '../types';
+import {
+  SpjDocument,
+  SpjType,
+  SchoolProfile,
+  SpjItem,
+  MonthWorksheet,
+  ArkasPerubahanMonthWorksheet
+} from '../types';
 import { SchoolLogo } from './SchoolLogo';
 import {
   formatRp,
@@ -22,10 +29,14 @@ import {
   formatTanggalIndo,
   todayISO,
   generateNomorDokumen,
-  generateUid
+  generateUid,
+  buildOfficialSpjFromBelanjaItem,
+  parseDateToParts
 } from '../utils/formatters';
 import { printSpjDocument } from '../utils/printDocument';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST } from '../data/standarData';
+import { MONTH_NAMES } from '../data/schoolProfile';
+import { FlexibleDateControl } from './FlexibleDateControl';
 
 interface SpjViewProps {
   type: SpjType;
@@ -34,6 +45,8 @@ interface SpjViewProps {
   onSaveDoc: (doc: SpjDocument) => void;
   onPrintDoc: (doc: SpjDocument, copy?: string) => void;
   allDocs: SpjDocument[];
+  worksheets?: MonthWorksheet[];
+  perubahanWorksheets?: ArkasPerubahanMonthWorksheet[];
 }
 
 export const SpjView: React.FC<SpjViewProps> = ({
@@ -42,9 +55,12 @@ export const SpjView: React.FC<SpjViewProps> = ({
   school,
   onSaveDoc,
   onPrintDoc,
-  allDocs
+  allDocs,
+  worksheets = [],
+  perubahanWorksheets = []
 }) => {
   const [doc, setDoc] = useState<SpjDocument>(draft);
+  const [filterBelanjaMonth, setFilterBelanjaMonth] = useState<number>(0);
 
   useEffect(() => {
     setDoc(draft);
@@ -165,27 +181,102 @@ export const SpjView: React.FC<SpjViewProps> = ({
               ? '✓ Dokumen SPJ ini diterbitkan dari alokasi belanja ARKAS Perubahan.'
               : '✓ Dokumen SPJ ini diterbitkan dari alokasi belanja ARKAS Murni (Reguler).'}
           </div>
+
+          {/* Pilih Cepat dari Rincian Belanja Bulan Kerja */}
+          {(worksheets.length > 0 || perubahanWorksheets.length > 0) && (
+            <div className="pt-2 mt-2 border-t border-[#E0DACE] space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-bold text-[#2C2A28] flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-[#059669]" />
+                  <span>Pilih Belanja untuk Terbitkan SPJ Resmi Ini:</span>
+                </label>
+                <select
+                  value={filterBelanjaMonth}
+                  onChange={(e) => setFilterBelanjaMonth(Number(e.target.value))}
+                  className="text-[10px] font-bold bg-white border border-[#D5CEBF] rounded-lg px-2 py-0.5 text-[#2C2A28]"
+                >
+                  {MONTH_NAMES.map((m, idx) => (
+                    <option key={idx} value={idx}>
+                      Bulan {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <select
+                value={doc.sourceKertasKerjaId || ''}
+                onChange={(e) => {
+                  const itemId = e.target.value;
+                  if (!itemId) return;
+                  const isPerub = doc.sourceArkasType === 'perubahan';
+                  const list = isPerub
+                    ? perubahanWorksheets[filterBelanjaMonth]?.items.filter(
+                        (it) => it.statusPerubahan !== 'DIHILANGKAN'
+                      ) || []
+                    : worksheets[filterBelanjaMonth]?.items || [];
+                  const found = list.find((it) => it.id === itemId);
+                  if (found) {
+                    const generated = buildOfficialSpjFromBelanjaItem(
+                      found,
+                      filterBelanjaMonth,
+                      isPerub ? 'perubahan' : 'murni',
+                      school,
+                      allDocs,
+                      type
+                    );
+                    setDoc(generated);
+                  }
+                }}
+                className="w-full p-2 bg-white border border-[#C5BDAF] rounded-xl text-[11px] font-medium text-[#2C2A28] cursor-pointer"
+              >
+                <option value="">
+                  -- Pilih dari Daftar Belanja {MONTH_NAMES[filterBelanjaMonth]} (Semua Belanja Ada SPJ Resmi) --
+                </option>
+                {(doc.sourceArkasType === 'perubahan'
+                  ? perubahanWorksheets[filterBelanjaMonth]?.items.filter(
+                      (it) => it.statusPerubahan !== 'DIHILANGKAN'
+                    ) || []
+                  : worksheets[filterBelanjaMonth]?.items || []
+                ).map((it, idx) => (
+                  <option key={it.id} value={it.id}>
+                    {idx + 1}. [{formatTanggalIndo(it.tanggal, it.tanggalManualText)}] {it.uraian} — {formatRp(it.jumlah)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Form Fields */}
         <div className="space-y-3 text-xs">
-          <div className="grid grid-cols-2 gap-3">
+          {/* Pengisian Tanggal, Bulan, Tahun (Update Otomatis & Manual Kapan Saja) */}
+          <FlexibleDateControl
+            tanggal={doc.tanggal}
+            tanggalManualText={doc.tanggalManualText}
+            defaultMonthIndex={parseDateToParts(doc.tanggal).monthIndex}
+            defaultYear={school.tahunAnggaran || '2026'}
+            compact={true}
+            label="Tanggal, Bulan & Tahun Dokumen SPJ (Update & Manual)"
+            onChange={(newIsoDate, newManualText) => {
+              const p = parseDateToParts(newIsoDate, 0, school.tahunAnggaran || '2026', newManualText);
+              const tw = p.monthIndex < 3 ? 'I' : p.monthIndex < 6 ? 'II' : p.monthIndex < 9 ? 'III' : 'IV';
+              setDoc((prev) => ({
+                ...prev,
+                tanggal: newIsoDate,
+                tanggalManualText: newManualText,
+                triwulan: tw,
+                nomor: generateNomorDokumen(prev.type, newIsoDate, allDocs, school)
+              }));
+            }}
+          />
+
+          <div className="grid grid-cols-1 gap-3">
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Nomor Dokumen</label>
+              <label className="block font-bold text-slate-700 mb-1">Nomor Dokumen Resmi SPJ</label>
               <input
                 type="text"
                 value={doc.nomor}
                 onChange={(e) => handleFieldChange('nomor', e.target.value)}
                 className="w-full p-2 border border-slate-200 rounded-xl font-mono text-slate-900 font-bold"
-              />
-            </div>
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Tanggal</label>
-              <input
-                type="date"
-                value={doc.tanggal}
-                onChange={(e) => handleFieldChange('tanggal', e.target.value)}
-                className="w-full p-2 border border-slate-200 rounded-xl"
               />
             </div>
           </div>
@@ -721,7 +812,7 @@ export const SpjView: React.FC<SpjViewProps> = ({
                   </div>
 
                   <div className="text-right text-[11px] font-sans">
-                    Sentani, {formatTanggalIndo(doc.tanggal)}
+                    Sentani, {formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}
                   </div>
                 </div>
 
@@ -827,7 +918,7 @@ export const SpjView: React.FC<SpjViewProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <div>Sentani, {formatTanggalIndo(doc.tanggal)}</div>
+                  <div>Sentani, {formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
                   <div className="font-bold">Bendahara BOSP</div>
                   <div className="h-14"></div>
                   <div className="font-bold underline">{school.bendaharaNama}</div>
@@ -849,7 +940,7 @@ export const SpjView: React.FC<SpjViewProps> = ({
                 <div className="text-right font-mono">
                   <div className="text-sm font-black uppercase text-slate-900">{type.toUpperCase()}</div>
                   <div className="text-[10px]">No: {doc.nomor}</div>
-                  <div className="text-[10px]">{formatTanggalIndo(doc.tanggal)}</div>
+                  <div className="text-[10px]">{formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
                 </div>
               </div>
 
@@ -951,7 +1042,7 @@ export const SpjView: React.FC<SpjViewProps> = ({
                 </div>
 
                 <div className="text-right">
-                  <div>Sentani, {formatTanggalIndo(doc.tanggal)}</div>
+                  <div>Sentani, {formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
                   <div className="font-bold">Bendahara BOSP</div>
                   <div className="h-16"></div>
                   <div className="font-bold underline">{school.bendaharaNama}</div>

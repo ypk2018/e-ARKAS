@@ -1,4 +1,5 @@
 import { MonthWorksheet, KertasKerjaItem } from '../types';
+import { MONTH_NAMES } from './schoolProfile';
 
 let idCounter = 1;
 const makeItem = (
@@ -37,7 +38,7 @@ const makeItem = (
   jabatanDefault: jabatan,
 });
 
-export const INITIAL_KERTAS_KERJA_DATA: MonthWorksheet[] = [
+const RAW_KERTAS_KERJA_DATA: MonthWorksheet[] = [
   // 1. JANUARI 2026 (Total: 43.405.000)
   {
     bulanKey: "januari",
@@ -388,3 +389,27 @@ export const INITIAL_KERTAS_KERJA_DATA: MonthWorksheet[] = [
     ]
   }
 ];
+
+export const INITIAL_KERTAS_KERJA_DATA: MonthWorksheet[] = RAW_KERTAS_KERJA_DATA.map((ws, mIdx) => {
+  const mStr = String(mIdx + 1).padStart(2, '0');
+  const mName = MONTH_NAMES[mIdx] || 'Januari';
+  return {
+    ...ws,
+    items: ws.items.map((it, idx) => {
+      const dayNum = Math.min(28, 5 + ((idx * 2) % 22));
+      const dStr = String(dayNum).padStart(2, '0');
+      const isHonor =
+        it.uraian.toLowerCase().includes('honor') ||
+        it.uraian.toLowerCase().includes('gaji') ||
+        it.kodeRekening.includes('5.1.02.02.01.0011') ||
+        it.kodeRekening.includes('5.1.02.02.01.0013');
+      return {
+        ...it,
+        tanggal: it.tanggal || `2026-${mStr}-${dStr}`,
+        tanggalManualText: it.tanggalManualText || `${dayNum} ${mName} 2026`,
+        spjDocType: it.spjDocType || (isHonor ? 'daftar' : 'kwitansi')
+      };
+    })
+  };
+});
+

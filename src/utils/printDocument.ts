@@ -518,7 +518,7 @@ export function generateSingleDocPageHtml(
               <div class="amount-value">${formatRp(doc.jumlah)},-</div>
             </div>
             <div class="date-loc">
-              Sentani, ${formatTanggalIndo(doc.tanggal)}
+              Sentani, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}
             </div>
           </div>
 
@@ -615,7 +615,7 @@ export function generateSingleDocPageHtml(
             <div>NIP. ${school.kepsekNip}</div>
           </div>
           <div class="sig-col" style="width: 50%;">
-            <div>Sentani, ${formatTanggalIndo(doc.tanggal)}</div>
+            <div>Sentani, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
             <div class="font-bold">Bendahara BOSP</div>
             <div class="sig-space"></div>
             <div class="sig-name">${school.bendaharaNama}</div>
@@ -635,7 +635,7 @@ export function generateSingleDocPageHtml(
           <div style="text-align: right; font-family: Arial, sans-serif;">
             <div style="font-size: 12pt; font-weight: 900; text-transform: uppercase;">${doc.type.toUpperCase()}</div>
             <div style="font-size: 9pt;">No: <b>${doc.nomor}</b></div>
-            <div style="font-size: 9pt;">Tanggal: ${formatTanggalIndo(doc.tanggal)}</div>
+            <div style="font-size: 9pt;">Tanggal: ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
           </div>
         </div>
 
@@ -689,7 +689,7 @@ export function generateSingleDocPageHtml(
             <div>NIP. ${school.bendaharaNip}</div>
           </div>
           <div class="sig-col" style="width: 50%;">
-            <div>Sentani, ${formatTanggalIndo(doc.tanggal)}</div>
+            <div>Sentani, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
             <div class="font-bold">${doc.tokoNama || 'Hormat Kami (Penyedia Toko)'}</div>
             <div class="sig-space"></div>
             <div class="sig-name">${doc.tokoPic || '................................'}</div>
@@ -707,7 +707,7 @@ export function generateSingleDocPageHtml(
 
         <div style="padding: 10pt 0; margin: 8pt 0; font-size: 10.5pt; line-height: 1.6;">
           <p style="margin-bottom: 8pt;">
-            Pada hari ini <b>${formatTanggalIndo(doc.tanggal)}</b>, telah dikeluarkan/dipertanggungjawabkan dana ${school.sumberDana} Tahun Anggaran ${school.tahunAnggaran} sebagai berikut:
+            Pada hari ini <b>${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</b>, telah dikeluarkan/dipertanggungjawabkan dana ${school.sumberDana} Tahun Anggaran ${school.tahunAnggaran} sebagai berikut:
           </p>
 
           <table class="info-table" style="margin: 8pt 0;">
@@ -749,7 +749,7 @@ export function generateSingleDocPageHtml(
             <div>NIP. ${school.kepsekNip}</div>
           </div>
           <div class="sig-col" style="width: 50%;">
-            <div>Sentani, ${formatTanggalIndo(doc.tanggal)}</div>
+            <div>Sentani, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
             <div class="font-bold">Bendahara BOSP</div>
             <div class="sig-space"></div>
             <div class="sig-name">${school.bendaharaNama}</div>
@@ -947,6 +947,7 @@ export function buildWorksheetPrintHtml(
                   <td class="font-mono text-center" style="font-size: 8pt;">${it.kodeProgram || '-'}</td>
                   <td>
                     <div style="font-weight: bold; font-size: 8.5pt;">[${it.temaId} - ${it.subtemaKode}] ${it.uraian}</div>
+                    ${(it.tanggal || it.tanggalManualText) ? `<div style="font-size: 7.5pt; color: #555;">Tanggal Belanja / SPJ: ${formatTanggalIndo(it.tanggal, it.tanggalManualText)}</div>` : ''}
                   </td>
                   <td class="text-center font-mono">${it.volume}</td>
                   <td class="text-center" style="font-size: 8.5pt;">${it.satuan}</td>

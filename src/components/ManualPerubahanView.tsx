@@ -14,7 +14,9 @@ import {
   HelpCircle,
   FileCheck2,
   Search,
-  Filter
+  Filter,
+  Receipt,
+  ExternalLink
 } from 'lucide-react';
 import {
   ArkasPerubahanMonthWorksheet,
@@ -22,12 +24,22 @@ import {
   SchoolProfile,
   UserAccount,
   MonthWorksheet,
-  BosRegulerItemTemplate
+  BosRegulerItemTemplate,
+  SpjDocument,
+  SpjType
 } from '../types';
-import { formatRp, formatTanggalIndo, generateUid, terbilang } from '../utils/formatters';
+import {
+  formatRp,
+  formatTanggalIndo,
+  generateUid,
+  terbilang,
+  buildOfficialSpjFromExpenditure,
+  inferDefaultSpjType
+} from '../utils/formatters';
 import { MONTH_NAMES } from '../data/schoolProfile';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { printManualPerubahanForm } from '../utils/printDocument';
+import { FlexibleDateControl, QuickDateSpjModal } from './FlexibleDateControl';
 
 interface ManualPerubahanViewProps {
   school: SchoolProfile;
@@ -36,6 +48,10 @@ interface ManualPerubahanViewProps {
   onUpdateWorksheet: (ws: ArkasPerubahanMonthWorksheet) => void;
   onNavigateToPerubahan: (monthIndex?: number) => void;
   currentUser?: UserAccount;
+  documents?: SpjDocument[];
+  onOpenSpjDoc?: (doc: SpjDocument) => void;
+  onCreateSpjFromPerubahanItem?: (item: ArkasPerubahanItem, monthIndex: number, customSpjType?: SpjType) => void;
+  onSaveOrUpdateOfficialSpj?: (doc: SpjDocument) => void;
 }
 
 export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
@@ -44,7 +60,11 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
   murniWorksheets: _murniWorksheets,
   onUpdateWorksheet,
   onNavigateToPerubahan,
-  currentUser: _currentUser
+  currentUser: _currentUser,
+  documents = [],
+  onOpenSpjDoc,
+  onCreateSpjFromPerubahanItem,
+  onSaveOrUpdateOfficialSpj
 }) => {
   const [selectedMonth, setSelectedMonth] = useState<number>(0);
   const [isFormOpen, setIsFormOpen] = useState<boolean>(false);
@@ -64,6 +84,13 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
   const [formTarif, setFormTarif] = useState<number>(1500000);
   const [formAlasan, setFormAlasan] = useState<string>('');
   const [formMonth, setFormMonth] = useState<number>(0);
+  const [formTanggal, setFormTanggal] = useState<string>(`${school.tahunAnggaran}-01-15`);
+  const [formTanggalManualText, setFormTanggalManualText] = useState<string>(`15 Januari ${school.tahunAnggaran}`);
+  const [formSpjDocType, setFormSpjDocType] = useState<SpjType>('kwitansi');
+  const [quickDateModalEntry, setQuickDateModalEntry] = useState<{
+    item: ArkasPerubahanItem;
+    monthIndex: number;
+  } | null>(null);
 
   // Auto-calculated total
   const formTotal = (formVolume || 0) * (formTarif || 0);
@@ -232,7 +259,10 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
             temaId: formTemaId,
             temaNama: temaObj ? temaObj.nama : it.temaNama,
             subtemaKode: formSubtemaKode,
-            subtemaNama: subtemaObj ? subtemaObj.nama : it.subtemaNama
+            subtemaNama: subtemaObj ? subtemaObj.nama : it.subtemaNama,
+            tanggal: formTanggal,
+            tanggalManualText: formTanggalManualText || formatTanggalIndo(formTanggal),
+            spjDocType: formSpjDocType
           };
         }
         return it;
@@ -243,7 +273,20 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
         items: updatedItems,
         totalPerubahan: updatedItems.reduce((acc, it) => acc + (it.statusPerubahan !== 'DIHILANGKAN' ? it.jumlah : 0), 0)
       });
-      setSaveSuccessMsg(`Item "${formUraian}" berhasil diperbarui.`);
+      const updatedObj = updatedItems.find((it) => it.id === editingItemId);
+      if (updatedObj && onSaveOrUpdateOfficialSpj) {
+        const existingDoc = documents.find((d) => d.sourceKertasKerjaId === updatedObj.id);
+        const syncedDoc = buildOfficialSpjFromExpenditure(
+          updatedObj,
+          formMonth,
+          school,
+          'perubahan',
+          existingDoc,
+          formSpjDocType
+        );
+        onSaveOrUpdateOfficialSpj(syncedDoc);
+      }
+      setSaveSuccessMsg(`Item "${formUraian}" beserta Tanggal & Dokumen SPJ Resmi berhasil diperbarui.`);
     } else {
       // Create new manual item
       const newItem: ArkasPerubahanItem = {
@@ -269,7 +312,10 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
         subtemaKode: formSubtemaKode,
         subtemaNama: subtemaObj ? subtemaObj.nama : 'Pelaksanaan Administrasi Sekolah',
         kegiatanKode: formKodeProgram,
-        kegiatanNama: formUraian
+        kegiatanNama: formUraian,
+        tanggal: formTanggal || `${school.tahunAnggaran}-${String(formMonth + 1).padStart(2, '0')}-15`,
+        tanggalManualText: formTanggalManualText || formatTanggalIndo(formTanggal),
+        spjDocType: formSpjDocType || inferDefaultSpjType(formKodeRekening, formUraian)
       };
 
       const updatedItems = [...targetWs.items, newItem];
@@ -278,7 +324,18 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
         items: updatedItems,
         totalPerubahan: updatedItems.reduce((acc, it) => acc + (it.statusPerubahan !== 'DIHILANGKAN' ? it.jumlah : 0), 0)
       });
-      setSaveSuccessMsg(`Item baru "${formUraian}" berhasil ditambahkan ke ARKAS Perubahan ${MONTH_NAMES[formMonth]}.`);
+      if (onSaveOrUpdateOfficialSpj) {
+        const officialDoc = buildOfficialSpjFromExpenditure(
+          newItem,
+          formMonth,
+          school,
+          'perubahan',
+          undefined,
+          newItem.spjDocType
+        );
+        onSaveOrUpdateOfficialSpj(officialDoc);
+      }
+      setSaveSuccessMsg(`Item baru "${formUraian}" beserta Tanggal & Dokumen SPJ Resmi berhasil ditambahkan ke ARKAS Perubahan ${MONTH_NAMES[formMonth]}.`);
     }
 
     // Reset and close
@@ -306,6 +363,10 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
     setFormSatuan(item.satuan);
     setFormTarif(item.tarifHarga);
     setFormAlasan(item.alasanPerubahan || '');
+    const defDate = `${school.tahunAnggaran}-${String(monthIdx + 1).padStart(2, '0')}-15`;
+    setFormTanggal(item.tanggal || defDate);
+    setFormTanggalManualText(item.tanggalManualText || formatTanggalIndo(item.tanggal || defDate));
+    setFormSpjDocType(item.spjDocType || inferDefaultSpjType(item.kodeRekening, item.uraian));
     setIsFormOpen(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -776,6 +837,20 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
               />
             </div>
 
+            {/* Row 6: Pengisian Tanggal, Bulan, Tahun (Update & Manual) + Dokumen SPJ Resmi */}
+            <FlexibleDateControl
+              tanggal={formTanggal}
+              tanggalManualText={formTanggalManualText}
+              onChange={(newIso, newManual) => {
+                setFormTanggal(newIso);
+                setFormTanggalManualText(newManual);
+              }}
+              spjDocType={formSpjDocType}
+              onChangeSpjDocType={(newType) => setFormSpjDocType(newType)}
+              showSpjSelector={true}
+              label="Tanggal, Bulan & Tahun Pelaksanaan Belanja (Update Otomatis / Manual)"
+            />
+
             {/* Action buttons */}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
@@ -908,6 +983,24 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
                         <span>•</span>
                         <span className="text-[#059669] font-bold">STATUS: {item.statusPerubahan}</span>
                       </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setQuickDateModalEntry({ item, monthIndex })}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#FAF8F4] hover:bg-[#5A5A40] text-[#2C2A28] hover:text-white border border-[#D9D1C2] text-[10px] font-semibold transition cursor-pointer"
+                          title="Update / Input Manual Tanggal, Bulan, Tahun & Dokumen SPJ Resmi"
+                        >
+                          <Calendar className="w-2.5 h-2.5 text-[#5A5A40] shrink-0" />
+                          <span>
+                            Tgl:{' '}
+                            {formatTanggalIndo(
+                              item.tanggal || `${school.tahunAnggaran}-${String(monthIndex + 1).padStart(2, '0')}-15`,
+                              item.tanggalManualText
+                            )}
+                          </span>
+                          <Edit2 className="w-2.5 h-2.5 opacity-70 ml-0.5" />
+                        </button>
+                      </div>
                     </td>
 
                     <td className="py-3 px-3 text-center">
@@ -931,6 +1024,17 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
 
                     <td className="py-3 px-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {/* ATUR TANGGAL & DOKUMEN SPJ RESMI */}
+                        <button
+                          type="button"
+                          onClick={() => setQuickDateModalEntry({ item, monthIndex })}
+                          className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Atur Tanggal, Bulan, Tahun (Update/Manual) & Buka/Cetak Dokumen SPJ Resmi"
+                        >
+                          <Receipt className="w-3 h-3" />
+                          <span>SPJ Resmi</span>
+                        </button>
+
                         {/* CETAK / SIMPAN PDF LEMBAR USULAN MANUAL */}
                         <button
                           onClick={() => printManualPerubahanForm(school, item, monthName)}
@@ -998,6 +1102,52 @@ export const ManualPerubahanView: React.FC<ManualPerubahanViewProps> = ({
           ))}
         </div>
       </div>
+
+      {/* Quick Date & Official SPJ Modal */}
+      {quickDateModalEntry && (
+        <QuickDateSpjModal
+          item={quickDateModalEntry.item}
+          monthIndex={quickDateModalEntry.monthIndex}
+          school={school}
+          sourceType="perubahan"
+          existingSpjDoc={documents.find((d) => d.sourceKertasKerjaId === quickDateModalEntry.item.id)}
+          onClose={() => setQuickDateModalEntry(null)}
+          onSaveDateAndSpj={(updatedFields, generatedDoc) => {
+            const targetWs = worksheets[quickDateModalEntry.monthIndex];
+            if (targetWs) {
+              const updatedItems = targetWs.items.map((it) =>
+                it.id === quickDateModalEntry.item.id
+                  ? {
+                      ...it,
+                      tanggal: updatedFields.tanggal,
+                      tanggalManualText: updatedFields.tanggalManualText,
+                      spjDocType: updatedFields.spjDocType
+                    }
+                  : it
+              );
+              onUpdateWorksheet({
+                ...targetWs,
+                items: updatedItems
+              });
+            }
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(generatedDoc);
+            }
+            setSaveSuccessMsg(`Tanggal (${updatedFields.tanggalManualText}) & Dokumen SPJ Resmi berhasil disimpan.`);
+            setTimeout(() => setSaveSuccessMsg(null), 3500);
+          }}
+          onOpenInSpjEditor={(doc) => {
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(doc);
+            }
+            if (onOpenSpjDoc) {
+              onOpenSpjDoc(doc);
+            } else if (onCreateSpjFromPerubahanItem) {
+              onCreateSpjFromPerubahanItem(quickDateModalEntry.item, quickDateModalEntry.monthIndex, doc.type);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

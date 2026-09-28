@@ -37,15 +37,24 @@ import {
   ArkasPerubahanItem,
   SchoolProfile,
   SpjDocument,
+  SpjType,
   UserAccount,
   PerubahanStatus,
   MonthWorksheet,
   BosRegulerItemTemplate
 } from '../types';
-import { formatRp, formatTanggalIndo, generateUid, terbilang } from '../utils/formatters';
+import {
+  formatRp,
+  formatTanggalIndo,
+  generateUid,
+  terbilang,
+  buildOfficialSpjFromExpenditure,
+  inferDefaultSpjType
+} from '../utils/formatters';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { MONTH_NAMES } from '../data/schoolProfile';
 import { printArkasPerubahanWorksheet } from '../utils/printDocument';
+import { FlexibleDateControl, QuickDateSpjModal } from './FlexibleDateControl';
 
 interface ArkasPerubahanViewProps {
   school: SchoolProfile;
@@ -55,7 +64,8 @@ interface ArkasPerubahanViewProps {
   onSelectMonth: (m: number) => void;
   onUpdateWorksheet: (ws: ArkasPerubahanMonthWorksheet) => void;
   onResetFromMurni: () => void;
-  onCreateSpjFromPerubahanItem: (item: ArkasPerubahanItem, monthIndex: number) => void;
+  onCreateSpjFromPerubahanItem: (item: ArkasPerubahanItem, monthIndex: number, customSpjType?: SpjType) => void;
+  onSaveOrUpdateOfficialSpj?: (doc: SpjDocument) => void;
   onPrintMonth: (mIndex: number) => void;
   searchQuery: string;
   documents?: SpjDocument[];
@@ -94,7 +104,8 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   onHilangkanItem,
   onMoveItem,
   onHapusTotalItem,
-  onRestoreItem
+  onRestoreItem,
+  onSaveOrUpdateOfficialSpj
 }) => {
   const currentWs = worksheets[selectedMonth] || worksheets[0];
   const [selectedTemaFilter, setSelectedTemaFilter] = useState<string>('all');
@@ -126,6 +137,13 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
   const [formTemaId, setFormTemaId] = useState<string>('06');
   const [formSubtemaKode, setFormSubtemaKode] = useState<string>('06.05');
   const [formAlasan, setFormAlasan] = useState<string>('');
+  const [formTanggal, setFormTanggal] = useState<string>('');
+  const [formTanggalManualText, setFormTanggalManualText] = useState<string>('');
+  const [formSpjDocType, setFormSpjDocType] = useState<SpjType>('kwitansi');
+  const [quickDateModalItem, setQuickDateModalItem] = useState<ArkasPerubahanItem | null>(null);
+  const [bulkDateInput, setBulkDateInput] = useState<string>('');
+  const [bulkManualInput, setBulkManualInput] = useState<string>('');
+  const [showBulkDateBar, setShowBulkDateBar] = useState<boolean>(false);
 
   // Handle auto-application of BOS Reguler template item
   const handleApplyBosItem = (itemTemplate: BosRegulerItemTemplate) => {
@@ -352,6 +370,10 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
     setFormTemaId('06');
     setFormSubtemaKode('06.05');
     setFormAlasan('Penambahan belanja baru yang tidak terdapat di ARKAS Murni untuk kebutuhan operasional');
+    const defaultDate = `${school.tahunAnggaran}-${String(selectedMonth + 1).padStart(2, '0')}-15`;
+    setFormTanggal(defaultDate);
+    setFormTanggalManualText(`15 ${MONTH_NAMES[selectedMonth]} ${school.tahunAnggaran}`);
+    setFormSpjDocType('kwitansi');
     setSemulaVol(0);
     setSemulaSat('-');
     setSemulaTar(0);
@@ -376,6 +398,10 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
     setFormTemaId(it.temaId);
     setFormSubtemaKode(it.subtemaKode);
     setFormAlasan(it.alasanPerubahan || '');
+    const fallbackDate = `${school.tahunAnggaran}-${String(selectedMonth + 1).padStart(2, '0')}-${String(Math.min(28, 5 + ((it.noUrut || 1) * 2) % 23)).padStart(2, '0')}`;
+    setFormTanggal(it.tanggal || fallbackDate);
+    setFormTanggalManualText(it.tanggalManualText || formatTanggalIndo(it.tanggal || fallbackDate));
+    setFormSpjDocType(it.spjDocType || inferDefaultSpjType(it.kodeRekening, it.uraian));
 
     setSemulaVol(it.semulaVolume);
     setSemulaSat(it.semulaSatuan);
@@ -429,6 +455,9 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
             temaNama: temaObj?.nama || it.temaNama,
             subtemaKode: formSubtemaKode,
             subtemaNama: subtemaObj?.nama || it.subtemaNama,
+            tanggal: formTanggal,
+            tanggalManualText: formTanggalManualText || formatTanggalIndo(formTanggal),
+            spjDocType: formSpjDocType,
             updatedAt: new Date().toISOString()
           };
         }
@@ -439,6 +468,23 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
         ...currentWs,
         items: updatedItems
       });
+
+      // Sync linked official SPJ document if it exists
+      const updatedItemObj = updatedItems.find((it) => it.id === editingItem.id);
+      if (updatedItemObj && onSaveOrUpdateOfficialSpj && calculatedStatus !== 'DIHILANGKAN') {
+        const existingSpj = getItemSpjDoc(updatedItemObj);
+        if (existingSpj) {
+          const syncedDoc = buildOfficialSpjFromExpenditure(
+            updatedItemObj,
+            selectedMonth,
+            school,
+            'perubahan',
+            existingSpj,
+            formSpjDocType
+          );
+          onSaveOrUpdateOfficialSpj(syncedDoc);
+        }
+      }
 
       if (onAddActivityLog && currentUser) {
         onAddActivityLog({
@@ -475,6 +521,9 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
         temaNama: temaObj?.nama || 'Standar ' + formTemaId,
         subtemaKode: formSubtemaKode,
         subtemaNama: subtemaObj?.nama || 'Program ' + formSubtemaKode,
+        tanggal: formTanggal || `${school.tahunAnggaran}-${String(selectedMonth + 1).padStart(2, '0')}-15`,
+        tanggalManualText: formTanggalManualText || formatTanggalIndo(formTanggal),
+        spjDocType: formSpjDocType || inferDefaultSpjType(formKodeRekening, formUraian),
         createdAt: new Date().toISOString()
       };
 
@@ -482,6 +531,18 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
         ...currentWs,
         items: [...currentWs.items, newItem]
       });
+
+      if (onSaveOrUpdateOfficialSpj) {
+        const officialDoc = buildOfficialSpjFromExpenditure(
+          newItem,
+          selectedMonth,
+          school,
+          'perubahan',
+          undefined,
+          newItem.spjDocType
+        );
+        onSaveOrUpdateOfficialSpj(officialDoc);
+      }
 
       if (onAddActivityLog && currentUser) {
         onAddActivityLog({
@@ -1049,18 +1110,147 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
           </div>
         </div>
 
-        {/* Search Input */}
-        <div className="relative w-full md:w-72">
-          <Search className="w-4 h-4 text-[#8C867E] absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="Cari rekening / uraian / alasan..."
-            value={searchQuery}
-            onChange={() => {}}
-            className="w-full pl-9 pr-3 py-2 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
-          />
+        {/* Search Input & Bulk Date Trigger */}
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <button
+            type="button"
+            onClick={() => {
+              const defDate = `${school.tahunAnggaran}-${String(selectedMonth + 1).padStart(2, '0')}-15`;
+              setBulkDateInput(defDate);
+              setBulkManualInput(`15 ${MONTH_NAMES[selectedMonth]} ${school.tahunAnggaran}`);
+              setShowBulkDateBar(!showBulkDateBar);
+            }}
+            className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition cursor-pointer shrink-0 ${
+              showBulkDateBar
+                ? 'bg-[#5A5A40] text-white border-[#5A5A40]'
+                : 'bg-[#F9F7F2] hover:bg-[#EFECE4] text-[#2C2A28] border-[#E0DACE]'
+            }`}
+            title="Atur / Update Tanggal, Bulan, Tahun & Dokumen SPJ Resmi untuk semua belanja di bulan ini"
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Atur Tanggal & SPJ Massal</span>
+          </button>
+          <div className="relative flex-1 md:w-64">
+            <Search className="w-4 h-4 text-[#8C867E] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Cari rekening / uraian / alasan..."
+              value={searchQuery}
+              onChange={() => {}}
+              className="w-full pl-9 pr-3 py-2 bg-[#F9F7F2] border border-[#E0DACE] rounded-xl text-xs text-[#2C2A28] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#5A5A40]"
+            />
+          </div>
         </div>
       </div>
+
+      {/* Bulk Date Update & Manual Bar */}
+      {showBulkDateBar && (
+        <div className="bg-[#FAF8F4] border border-[#D9D1C2] p-4 rounded-2xl space-y-3 shadow-2xs">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Calendar className="w-4 h-4 text-[#5A5A40]" />
+              <div>
+                <h4 className="text-xs font-bold text-[#2C2A28]">
+                  Pengaturan Tanggal, Bulan & Tahun Massal ({MONTH_NAMES[selectedMonth]}) — ARKAS Perubahan
+                </h4>
+                <p className="text-[11px] text-[#6B665E]">
+                  Bisa update otomatis dari kalender / hari ini, atau ketik manual Tanggal, Bulan, dan Tahun kapan saja untuk seluruh belanja aktif bulan ini beserta Dokumen SPJ Resminya.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBulkDateBar(false)}
+              className="p-1 text-[#8C867E] hover:text-[#2C2A28] cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+            <div>
+              <label className="block text-[10px] font-bold text-[#6B665E] uppercase mb-1">
+                Update Tanggal Kalender (Otomatis)
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={bulkDateInput}
+                  onChange={(e) => {
+                    setBulkDateInput(e.target.value);
+                    setBulkManualInput(formatTanggalIndo(e.target.value));
+                  }}
+                  className="flex-1 px-2.5 py-1.5 bg-white border border-[#D9D1C2] rounded-xl text-xs font-mono font-bold text-[#2C2A28]"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const today = new Date().toISOString().slice(0, 10);
+                    setBulkDateInput(today);
+                    setBulkManualInput(formatTanggalIndo(today));
+                  }}
+                  className="px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-[11px] font-semibold cursor-pointer"
+                >
+                  Hari Ini
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-[#6B665E] uppercase mb-1">
+                Atau Ketik Manual (Tanggal, Bulan, Tahun Bebas)
+              </label>
+              <input
+                type="text"
+                value={bulkManualInput}
+                onChange={(e) => setBulkManualInput(e.target.value)}
+                placeholder="Contoh: 20 Agustus 2026"
+                className="w-full px-3 py-1.5 bg-white border border-[#D9D1C2] rounded-xl text-xs font-semibold text-[#2C2A28]"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const updatedItems = currentWs.items.map((it) => ({
+                    ...it,
+                    tanggal: bulkDateInput || it.tanggal,
+                    tanggalManualText: bulkManualInput.trim() || formatTanggalIndo(bulkDateInput || it.tanggal),
+                    spjDocType: it.spjDocType || inferDefaultSpjType(it.kodeRekening, it.uraian)
+                  }));
+                  onUpdateWorksheet({
+                    ...currentWs,
+                    items: updatedItems
+                  });
+                  if (onSaveOrUpdateOfficialSpj) {
+                    updatedItems.forEach((it) => {
+                      if (it.statusPerubahan === 'DIHILANGKAN') return;
+                      const existing = getItemSpjDoc(it);
+                      const doc = buildOfficialSpjFromExpenditure(
+                        it,
+                        selectedMonth,
+                        school,
+                        'perubahan',
+                        existing,
+                        it.spjDocType
+                      );
+                      onSaveOrUpdateOfficialSpj(doc);
+                    });
+                  }
+                  setSavedToast(`Tanggal (${bulkManualInput || formatTanggalIndo(bulkDateInput)}) & Dokumen SPJ Resmi berhasil diterapkan ke semua belanja aktif bulan ${MONTH_NAMES[selectedMonth]}`);
+                  setTimeout(() => setSavedToast(null), 4000);
+                  setShowBulkDateBar(false);
+                }}
+                className="w-full px-3 py-2 bg-[#5A5A40] hover:bg-[#484832] text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer transition"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Terapkan Tanggal & Terbitkan Semua SPJ Resmi</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Elimination Notice Toast Banner */}
       {eliminationNotice && (
@@ -1207,6 +1397,26 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                         <div className="text-[10px] text-[#6B665E] mt-0.5">
                           Standar {item.temaId} &bull; {item.subtemaNama}
                         </div>
+                        {/* Tanggal, Bulan, Tahun Badge (Update / Manual) */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setQuickDateModalItem(item)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#FAF8F4] hover:bg-[#5A5A40] text-[#2C2A28] hover:text-white border border-[#D9D1C2] text-[10px] font-semibold transition cursor-pointer shadow-2xs"
+                            title="Klik untuk Update / Input Manual Tanggal, Bulan, Tahun & Dokumen SPJ Resmi"
+                          >
+                            <Calendar className="w-2.5 h-2.5 text-[#5A5A40] group-hover:text-white shrink-0" />
+                            <span>
+                              Tgl Belanja:{' '}
+                              {formatTanggalIndo(
+                                item.tanggal ||
+                                  `${school.tahunAnggaran}-${String(selectedMonth + 1).padStart(2, '0')}-${String(Math.min(28, 5 + ((idx + 1) * 2) % 23)).padStart(2, '0')}`,
+                                item.tanggalManualText
+                              )}
+                            </span>
+                            <Edit2 className="w-2.5 h-2.5 opacity-70 ml-0.5" />
+                          </button>
+                        </div>
                         {item.alasanPerubahan && (
                           <div className="text-[10px] italic text-[#8B4513] bg-[#FAF6EE] px-2 py-0.5 rounded mt-1 inline-block border border-[#E0DACE]">
                             Alasan: {item.alasanPerubahan}
@@ -1287,36 +1497,49 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
 
                       {/* Status SPJ Resmi */}
                       <td className="py-3 px-3 text-center">
-                        {spjDoc ? (
-                          <div className="inline-flex flex-col items-center">
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                              <span>✓ SPJ Terbit</span>
-                            </span>
-                            {onOpenSpjDoc && (
-                              <button
-                                type="button"
-                                onClick={() => onOpenSpjDoc(spjDoc)}
-                                className="text-[10px] text-[#5A5A40] hover:underline font-mono mt-0.5 inline-flex items-center gap-0.5 cursor-pointer"
-                                title="Buka Dokumen SPJ"
-                              >
-                                <span>{spjDoc.nomor.slice(0, 14)}...</span>
-                                <ExternalLink className="w-2.5 h-2.5" />
-                              </button>
-                            )}
-                          </div>
-                        ) : isDihilangkan ? (
+                        {isDihilangkan ? (
                           <span className="text-[10px] text-[#8C867E] italic">Dibatalkan</span>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => onCreateSpjFromPerubahanItem(item, selectedMonth)}
-                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-[#F9F7F2] hover:bg-[#5A5A40] hover:text-white text-[#5A5A40] border border-[#D9D1C2] transition cursor-pointer"
-                            title="Buat dokumen Kwitansi / Daftar Honor untuk rincian ini"
-                          >
-                            <Receipt className="w-3 h-3" />
-                            <span>+ Buat SPJ</span>
-                          </button>
+                          <div className="flex flex-col items-center gap-1">
+                            {spjDoc ? (
+                              <div className="inline-flex flex-col items-center">
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  <span>✓ SPJ Resmi</span>
+                                </span>
+                                {onOpenSpjDoc && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenSpjDoc(spjDoc)}
+                                    className="text-[10px] text-[#5A5A40] hover:underline font-mono mt-0.5 inline-flex items-center gap-0.5 cursor-pointer"
+                                    title="Buka Dokumen SPJ Resmi"
+                                  >
+                                    <span>{spjDoc.nomor.slice(0, 14)}...</span>
+                                    <ExternalLink className="w-2.5 h-2.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => onCreateSpjFromPerubahanItem(item, selectedMonth, item.spjDocType)}
+                                className="inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-[#F9F7F2] hover:bg-[#5A5A40] hover:text-white text-[#5A5A40] border border-[#D9D1C2] transition cursor-pointer"
+                                title="Buat & buka dokumen SPJ Resmi untuk rincian ini"
+                              >
+                                <Receipt className="w-3 h-3" />
+                                <span>+ Buat SPJ Resmi</span>
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setQuickDateModalItem(item)}
+                              className="inline-flex items-center gap-1 text-[9px] font-semibold px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition cursor-pointer"
+                              title="Atur Tanggal, Bulan, Tahun (Update/Manual) & Cetak 7 Dokumen SPJ Resmi"
+                            >
+                              <Calendar className="w-2.5 h-2.5" />
+                              <span>Tgl & Dokumen SPJ</span>
+                            </button>
+                          </div>
                         )}
                       </td>
 
@@ -1740,6 +1963,20 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
                 />
               </div>
 
+              {/* Pengisian Tanggal, Bulan, Tahun (Update & Manual) + Dokumen SPJ Resmi */}
+              <FlexibleDateControl
+                tanggal={formTanggal}
+                tanggalManualText={formTanggalManualText}
+                onChange={(newIso, newManual) => {
+                  setFormTanggal(newIso);
+                  setFormTanggalManualText(newManual);
+                }}
+                spjDocType={formSpjDocType}
+                onChangeSpjDocType={(newType) => setFormSpjDocType(newType)}
+                showSpjSelector={true}
+                label="Tanggal, Bulan & Tahun Belanja Perubahan (Update Otomatis / Manual)"
+              />
+
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -1935,6 +2172,50 @@ export const ArkasPerubahanView: React.FC<ArkasPerubahanViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Quick Date (Update & Manual) + Official SPJ Document Modal */}
+      {quickDateModalItem && (
+        <QuickDateSpjModal
+          item={quickDateModalItem}
+          monthIndex={selectedMonth}
+          school={school}
+          sourceType="perubahan"
+          existingSpjDoc={getItemSpjDoc(quickDateModalItem)}
+          onClose={() => setQuickDateModalItem(null)}
+          onSaveDateAndSpj={(updatedFields, generatedDoc) => {
+            const updatedItems = currentWs.items.map((it) =>
+              it.id === quickDateModalItem.id
+                ? {
+                    ...it,
+                    tanggal: updatedFields.tanggal,
+                    tanggalManualText: updatedFields.tanggalManualText,
+                    spjDocType: updatedFields.spjDocType,
+                    updatedAt: new Date().toISOString()
+                  }
+                : it
+            );
+            onUpdateWorksheet({
+              ...currentWs,
+              items: updatedItems
+            });
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(generatedDoc);
+            }
+            setSavedToast(`Tanggal (${updatedFields.tanggalManualText}) & Dokumen SPJ Resmi berhasil disimpan`);
+            setTimeout(() => setSavedToast(null), 3500);
+          }}
+          onOpenInSpjEditor={(doc) => {
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(doc);
+            }
+            if (onOpenSpjDoc) {
+              onOpenSpjDoc(doc);
+            } else {
+              onCreateSpjFromPerubahanItem(quickDateModalItem, selectedMonth, doc.type);
+            }
+          }}
+        />
       )}
 
       {/* Floating Save Toast */}

@@ -1,23 +1,32 @@
 import React, { useState } from 'react';
-import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight, Sparkles, Printer } from 'lucide-react';
-import { MonthWorksheet, KertasKerjaItem, SchoolProfile } from '../types';
+import { Layers, ChevronDown, ChevronRight, FolderTree, Receipt, Search, ArrowRight, Sparkles, Printer, Calendar, Edit2 } from 'lucide-react';
+import { MonthWorksheet, KertasKerjaItem, SchoolProfile, SpjDocument, SpjType } from '../types';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
-import { formatRp } from '../utils/formatters';
+import { formatRp, formatTanggalIndo } from '../utils/formatters';
 import { MONTH_NAMES, DEFAULT_SCHOOL_PROFILE } from '../data/schoolProfile';
 import { printTemaExplorer } from '../utils/printDocument';
+import { QuickDateSpjModal } from './FlexibleDateControl';
 
 interface TemaExplorerViewProps {
   worksheets: MonthWorksheet[];
   school?: SchoolProfile;
-  onCreateSpjFromItem: (item: KertasKerjaItem, monthIndex: number) => void;
+  onCreateSpjFromItem: (item: KertasKerjaItem, monthIndex: number, customSpjType?: SpjType) => void;
   onSelectMonthAndTab: (monthIndex: number, tab: string) => void;
+  onUpdateWorksheet?: (ws: MonthWorksheet) => void;
+  documents?: SpjDocument[];
+  onOpenSpjDoc?: (doc: SpjDocument) => void;
+  onSaveOrUpdateOfficialSpj?: (doc: SpjDocument) => void;
 }
 
 export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
   worksheets,
   school = DEFAULT_SCHOOL_PROFILE,
   onCreateSpjFromItem,
-  onSelectMonthAndTab
+  onSelectMonthAndTab,
+  onUpdateWorksheet,
+  documents = [],
+  onOpenSpjDoc,
+  onSaveOrUpdateOfficialSpj
 }) => {
   const [expandedTema, setExpandedTema] = useState<Record<string, boolean>>({
     '04': true,
@@ -26,6 +35,10 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
     '08': true
   });
   const [searchFilter, setSearchFilter] = useState('');
+  const [quickDateEntry, setQuickDateEntry] = useState<{
+    item: KertasKerjaItem;
+    monthIndex: number;
+  } | null>(null);
 
   const toggleTema = (kode: string) => {
     setExpandedTema((prev) => ({ ...prev, [kode]: !prev[kode] }));
@@ -237,13 +250,29 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
                                 className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-[#F9F7F2] hover:bg-[#F2EDE4] border border-[#E0DACE]/60 text-xs transition"
                               >
                                 <div className="space-y-0.5 max-w-xl">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-mono text-[10px] text-[#5C5852] font-semibold">
                                       {entry.item.kodeRekening}
                                     </span>
                                     <span className="text-[10px] font-semibold text-[#5A5A40] bg-[#5A5A4015] border border-[#5A5A4030] px-2 py-0.2 rounded-full">
                                       Bulan {entry.monthName}
                                     </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setQuickDateEntry({ item: entry.item, monthIndex: entry.monthIndex })}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white hover:bg-[#5A5A40] text-[#2C2A28] hover:text-white border border-[#D9D1C2] text-[10px] font-semibold transition cursor-pointer"
+                                      title="Update / Input Manual Tanggal, Bulan, Tahun & Dokumen SPJ Resmi"
+                                    >
+                                      <Calendar className="w-2.5 h-2.5 text-[#5A5A40] shrink-0" />
+                                      <span>
+                                        Tgl:{' '}
+                                        {formatTanggalIndo(
+                                          entry.item.tanggal || `${school.tahunAnggaran}-${String(entry.monthIndex + 1).padStart(2, '0')}-15`,
+                                          entry.item.tanggalManualText
+                                        )}
+                                      </span>
+                                      <Edit2 className="w-2.5 h-2.5 opacity-70" />
+                                    </button>
                                   </div>
                                   <div className="font-medium text-[#2C2A28]">{entry.item.uraian}</div>
                                   <div className="text-[11px] text-[#6B665E]">
@@ -251,20 +280,30 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <div className="text-right">
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="text-right mr-1">
                                     <div className="font-mono font-bold text-[#2C2A28]">
                                       {formatRp(entry.item.jumlah)}
                                     </div>
                                   </div>
 
                                   <button
-                                    onClick={() => onCreateSpjFromItem(entry.item, entry.monthIndex)}
+                                    type="button"
+                                    onClick={() => setQuickDateEntry({ item: entry.item, monthIndex: entry.monthIndex })}
+                                    className="flex items-center gap-1 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-semibold px-2.5 py-1.5 rounded-xl text-[10px] transition cursor-pointer"
+                                    title="Atur Tanggal, Bulan, Tahun (Update/Manual) & 7 Dokumen SPJ Resmi"
+                                  >
+                                    <Calendar className="w-3 h-3" />
+                                    <span>Tgl & SPJ</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => onCreateSpjFromItem(entry.item, entry.monthIndex, entry.item.spjDocType)}
                                     className="flex items-center gap-1 bg-[#5A5A40] hover:bg-[#484832] text-white font-medium px-3 py-1.5 rounded-xl text-[11px] transition active:scale-95 cursor-pointer shadow-2xs"
                                     title="Buat Kwitansi / SPJ Resmi"
                                   >
                                     <Receipt className="w-3.5 h-3.5" />
-                                    <span>SPJ</span>
+                                    <span>SPJ Resmi</span>
                                   </button>
                                 </div>
                               </div>
@@ -280,6 +319,50 @@ export const TemaExplorerView: React.FC<TemaExplorerViewProps> = ({
           );
         })}
       </div>
+
+      {/* Quick Date & Official SPJ Modal */}
+      {quickDateEntry && (
+        <QuickDateSpjModal
+          item={quickDateEntry.item}
+          monthIndex={quickDateEntry.monthIndex}
+          school={school}
+          sourceType="murni"
+          existingSpjDoc={documents.find((d) => d.sourceKertasKerjaId === quickDateEntry.item.id)}
+          onClose={() => setQuickDateEntry(null)}
+          onSaveDateAndSpj={(updatedFields, generatedDoc) => {
+            const targetWs = worksheets[quickDateEntry.monthIndex];
+            if (targetWs && onUpdateWorksheet) {
+              const updatedItems = targetWs.items.map((it) =>
+                it.id === quickDateEntry.item.id
+                  ? {
+                      ...it,
+                      tanggal: updatedFields.tanggal,
+                      tanggalManualText: updatedFields.tanggalManualText,
+                      spjDocType: updatedFields.spjDocType
+                    }
+                  : it
+              );
+              onUpdateWorksheet({
+                ...targetWs,
+                items: updatedItems
+              });
+            }
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(generatedDoc);
+            }
+          }}
+          onOpenInSpjEditor={(doc) => {
+            if (onSaveOrUpdateOfficialSpj) {
+              onSaveOrUpdateOfficialSpj(doc);
+            }
+            if (onOpenSpjDoc) {
+              onOpenSpjDoc(doc);
+            } else {
+              onCreateSpjFromItem(quickDateEntry.item, quickDateEntry.monthIndex, doc.type);
+            }
+          }}
+        />
+      )}
     </div>
   );
 };

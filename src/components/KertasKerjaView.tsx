@@ -22,10 +22,26 @@ import {
   Clock,
   Sparkles
 } from 'lucide-react';
-import { MonthWorksheet, KertasKerjaItem, SchoolProfile, SpjDocument, UserAccount, BosRegulerItemTemplate } from '../types';
-import { formatRp, formatTanggalIndo, generateUid } from '../utils/formatters';
+import {
+  MonthWorksheet,
+  KertasKerjaItem,
+  SchoolProfile,
+  SpjDocument,
+  SpjType,
+  UserAccount,
+  BosRegulerItemTemplate
+} from '../types';
+import {
+  formatRp,
+  formatTanggalIndo,
+  generateUid,
+  buildOfficialSpjFromBelanjaItem,
+  detectBestSpjType
+} from '../utils/formatters';
 import { TEMA_STANDAR_LIST, SUBTEMA_PROGRAM_LIST, BOS_REGULER_ITEM_TEMPLATES } from '../data/standarData';
 import { MONTH_NAMES } from '../data/schoolProfile';
+import { FlexibleDateControl, QuickDateSpjModal } from './FlexibleDateControl';
+import { printSpjDocument } from '../utils/printDocument';
 
 interface KertasKerjaViewProps {
   school: SchoolProfile;
@@ -33,7 +49,7 @@ interface KertasKerjaViewProps {
   selectedMonth: number;
   onSelectMonth: (m: number) => void;
   onUpdateWorksheet: (ws: MonthWorksheet) => void;
-  onCreateSpjFromItem: (item: KertasKerjaItem, monthIndex: number) => void;
+  onCreateSpjFromItem: (item: KertasKerjaItem, monthIndex: number, preferredType?: SpjType) => void;
   onPrintMonth: (mIndex: number) => void;
   searchQuery: string;
   documents?: SpjDocument[];
@@ -73,6 +89,17 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
   const [formTarif, setFormTarif] = useState<number>(65000);
   const [formTemaId, setFormTemaId] = useState<string>('06');
   const [formSubtemaKode, setFormSubtemaKode] = useState<string>('06.05');
+  const [formTanggal, setFormTanggal] = useState<string>('2026-01-15');
+  const [formTanggalManual, setFormTanggalManual] = useState<string>('15 Januari 2026');
+  const [formSpjType, setFormSpjType] = useState<SpjType>('kwitansi');
+  const [quickDateSpjItem, setQuickDateSpjItem] = useState<KertasKerjaItem | null>(null);
+  const [isBulkDateOpen, setIsBulkDateOpen] = useState<boolean>(false);
+  const [bulkIsoDate, setBulkIsoDate] = useState<string>(
+    `${school.tahunAnggaran || '2026'}-${String(selectedMonth + 1).padStart(2, '0')}-15`
+  );
+  const [bulkManualText, setBulkManualText] = useState<string>(
+    `15 ${MONTH_NAMES[selectedMonth]} ${school.tahunAnggaran || '2026'}`
+  );
 
   // Handle auto-application of BOS Reguler template item
   const handleApplyBosItem = (itemTemplate: BosRegulerItemTemplate) => {
@@ -146,19 +173,15 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
 
   const currentMonthStatus = monthlySpjStatus[selectedMonth] || monthlySpjStatus[0];
 
-  // Helper to find matching SPJ for an individual item
-  const getItemSpjDoc = (item: KertasKerjaItem): SpjDocument | undefined => {
-    return documents.find((doc) => {
+  // Helper to find or build official SPJ for an individual item (Every item has an official SPJ!)
+  const getItemSpjDoc = (item: KertasKerjaItem): SpjDocument => {
+    const found = documents.find((doc) => {
+      if (doc.sourceKertasKerjaId === item.id && (doc.sourceArkasType || 'murni') === 'murni') return true;
       if (doc.sourceKertasKerjaId === item.id) return true;
-      // Match by exact amount and month date
-      if (doc.tanggal) {
-        const docMonth = new Date(doc.tanggal).getMonth();
-        if (docMonth === selectedMonth && (doc.jumlah === item.jumlah || (doc.uraian && item.uraian && doc.uraian.toLowerCase().includes(item.uraian.toLowerCase().slice(0, 15))))) {
-          return true;
-        }
-      }
       return false;
     });
+    if (found) return found;
+    return buildOfficialSpjFromBelanjaItem(item, selectedMonth, 'murni', school, documents, item.spjDocType);
   };
 
   // Filtered items
@@ -192,6 +215,10 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
     setFormTarif(65000);
     setFormTemaId('06');
     setFormSubtemaKode('06.05');
+    const defaultIso = `${school.tahunAnggaran || '2026'}-${String(selectedMonth + 1).padStart(2, '0')}-15`;
+    setFormTanggal(defaultIso);
+    setFormTanggalManual(`15 ${MONTH_NAMES[selectedMonth]} ${school.tahunAnggaran || '2026'}`);
+    setFormSpjType('kwitansi');
   };
 
   const handleOpenEdit = (it: KertasKerjaItem) => {
@@ -209,6 +236,13 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
     setFormTarif(it.tarifHarga);
     setFormTemaId(it.temaId);
     setFormSubtemaKode(it.subtemaKode);
+    const defaultIso =
+      it.tanggal || `${school.tahunAnggaran || '2026'}-${String(selectedMonth + 1).padStart(2, '0')}-15`;
+    setFormTanggal(defaultIso);
+    setFormTanggalManual(
+      it.tanggalManualText || formatTanggalIndo(defaultIso)
+    );
+    setFormSpjType(it.spjDocType || detectBestSpjType(it.uraian, it.kodeRekening));
   };
 
   const handleSaveForm = (e: React.FormEvent) => {
@@ -238,7 +272,10 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
             temaId: formTemaId,
             temaNama: temaObj?.nama || it.temaNama,
             subtemaKode: formSubtemaKode,
-            subtemaNama: subtemaObj?.nama || it.subtemaNama
+            subtemaNama: subtemaObj?.nama || it.subtemaNama,
+            tanggal: formTanggal,
+            tanggalManualText: formTanggalManual,
+            spjDocType: formSpjType
           };
         }
         return it;
@@ -275,7 +312,10 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
         temaId: formTemaId,
         temaNama: temaObj?.nama || 'Standar ' + formTemaId,
         subtemaKode: formSubtemaKode,
-        subtemaNama: subtemaObj?.nama || 'Program ' + formSubtemaKode
+        subtemaNama: subtemaObj?.nama || 'Program ' + formSubtemaKode,
+        tanggal: formTanggal,
+        tanggalManualText: formTanggalManual,
+        spjDocType: formSpjType
       };
 
       onUpdateWorksheet({
@@ -366,7 +406,22 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
           })}
         </div>
 
-        <div className="flex items-center gap-2 w-full md:w-auto justify-end shrink-0">
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={() => {
+              const defIso = `${school.tahunAnggaran || '2026'}-${String(selectedMonth + 1).padStart(2, '0')}-15`;
+              setBulkIsoDate(defIso);
+              setBulkManualText(`15 ${MONTH_NAMES[selectedMonth]} ${school.tahunAnggaran || '2026'}`);
+              setIsBulkDateOpen(!isBulkDateOpen);
+            }}
+            className="flex items-center gap-1.5 bg-[#F9F7F2] hover:bg-[#E8E2D6] text-[#2C2A28] border border-[#D5CEBF] font-semibold px-3.5 py-2 rounded-xl text-xs shadow-2xs cursor-pointer transition"
+            title="Atur / Update Tanggal, Bulan, Tahun secara serentak untuk seluruh belanja bulan ini"
+          >
+            <Calendar className="w-3.5 h-3.5 text-[#5A5A40]" />
+            <span>Atur Tanggal Bulan Ini</span>
+          </button>
+
           <button
             id="btn-add-item-work-sheet"
             onClick={handleOpenAdd}
@@ -386,6 +441,67 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Panel Pengaturan Tanggal, Bulan, Tahun Massal / Serentak Bulan Ini */}
+      {isBulkDateOpen && (
+        <div className="bg-white p-5 rounded-[24px] border-2 border-[#5A5A40] shadow-md space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-serif font-bold text-[#2C2A28]">
+                Pengisian Tanggal, Bulan & Tahun Serentak — Bulan {MONTH_NAMES[selectedMonth]}
+              </h3>
+              <p className="text-xs text-[#6B665E]">
+                Anda dapat mengupdate otomatis atau mengisi manual Tanggal, Bulan, dan Tahun untuk diterapkan ke seluruh rincian belanja bulan ini sekaligus (atau klik tanggal pada masing-masing baris belanja untuk mengatur secara terpisah).
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsBulkDateOpen(false)}
+              className="p-1.5 text-[#8C867E] hover:text-[#2C2A28] rounded-lg cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <FlexibleDateControl
+            tanggal={bulkIsoDate}
+            tanggalManualText={bulkManualText}
+            defaultMonthIndex={selectedMonth}
+            defaultYear={school.tahunAnggaran || '2026'}
+            compact={true}
+            label="Pilih / Ketik Manual Tanggal, Bulan & Tahun (Berlaku Kapan Saja)"
+            onChange={(newIso, newManual) => {
+              setBulkIsoDate(newIso);
+              setBulkManualText(newManual);
+            }}
+          />
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setIsBulkDateOpen(false)}
+              className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-[#5C5852] hover:bg-[#F2EDE4] cursor-pointer"
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const updatedItems = currentWs.items.map((it) => ({
+                  ...it,
+                  tanggal: bulkIsoDate,
+                  tanggalManualText: bulkManualText
+                }));
+                onUpdateWorksheet({ ...currentWs, items: updatedItems });
+                setIsBulkDateOpen(false);
+              }}
+              className="px-4 py-1.5 rounded-xl bg-[#059669] hover:bg-[#047857] text-white text-xs font-bold shadow-xs cursor-pointer"
+            >
+              Terapkan Tanggal ({bulkManualText}) ke Semua Belanja Bulan Ini
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Prominent Status Banner: Pemakaian Belanja di Dokumen SPJ Resmi */}
       <div
@@ -583,13 +699,29 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
                         {it.kodeProgram || '-'}
                       </td>
                       <td className="py-2.5 px-3 border-r border-[#E0DACE]/60">
-                        <div className="flex items-center gap-1.5 mb-1">
+                        <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                           <span className="text-[9px] font-semibold px-2 py-0.2 rounded-full bg-[#5A5A40] text-white">
                             Tema {it.temaId}
                           </span>
                           <span className="text-[9px] font-medium text-[#8B4513] bg-[#C06E5215] border border-[#C06E5230] px-2 py-0.2 rounded-full">
                             {it.subtemaNama}
                           </span>
+                          {/* Badge Tanggal, Bulan, Tahun Belanja (Klik untuk Update / Edit Manual Kapan Saja) */}
+                          <button
+                            type="button"
+                            onClick={() => setQuickDateSpjItem(it)}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-[#FAF8F5] hover:bg-[#5A5A40] text-[#2C2A28] hover:text-white border border-[#D5CEBF] transition cursor-pointer"
+                            title="Klik untuk Update Otomatis atau Isi Manual Tanggal, Bulan & Tahun Belanja Ini Kapan Saja"
+                          >
+                            <Calendar className="w-3 h-3 text-[#059669] shrink-0" />
+                            <span>
+                              {formatTanggalIndo(
+                                it.tanggal || `${school.tahunAnggaran || '2026'}-${String(selectedMonth + 1).padStart(2, '0')}-15`,
+                                it.tanggalManualText
+                              )}
+                            </span>
+                            <Edit2 className="w-2.5 h-2.5 opacity-60" />
+                          </button>
                         </div>
                         <div className="font-medium text-[#2C2A28] leading-snug">
                           {it.uraian}
@@ -608,42 +740,47 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
                         {formatRp(it.jumlah)}
                       </td>
 
-                      {/* Kolom Kode Centangan & Status Penggunaan SPJ Resmi */}
+                      {/* Kolom Dokumen SPJ Resmi (Semua Belanja Ada Dokumen SPJ Resmi) */}
                       <td className="py-2.5 px-3 text-center border-r border-[#E0DACE]/60">
-                        {matchedSpj ? (
-                          <div className="space-y-1">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
-                              onClick={() => onOpenSpjDoc && onOpenSpjDoc(matchedSpj)}
+                              onClick={() => setQuickDateSpjItem(it)}
                               className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-[10px] font-bold hover:bg-emerald-100 transition cursor-pointer group"
-                              title="Klik untuk membuka dan mencetak dokumen SPJ resmi ini"
+                              title="Semua belanja dilengkapi Dokumen SPJ Resmi. Klik untuk mengatur Tanggal/Bulan/Tahun & membuka 7 Jenis Dokumen SPJ Resmi"
                             >
                               <span className="text-emerald-600 font-black">✓</span>
-                              <span className="truncate max-w-[110px]">SPJ Terbit</span>
+                              <span>Dokumen SPJ Resmi</span>
                               <ExternalLink className="w-2.5 h-2.5 text-emerald-600 group-hover:scale-110" />
                             </button>
-                            <div className="text-[9px] text-slate-500 font-mono truncate max-w-[130px] mx-auto" title={matchedSpj.nomor}>
-                              {matchedSpj.nomor}
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => printSpjDocument(matchedSpj, school, 'ASLI')}
+                              className="p-1 rounded-lg bg-[#FAF8F5] hover:bg-[#C06E52] text-[#5A5A40] hover:text-white border border-[#D5CEBF] transition cursor-pointer"
+                              title="Cetak / Simpan PDF Dokumen SPJ Resmi Belanja Ini"
+                            >
+                              <Printer className="w-3 h-3" />
+                            </button>
                           </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => onCreateSpjFromItem(it, selectedMonth)}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#F2EDE4] hover:bg-[#E8E2D6] text-[#6B665E] hover:text-[#2C2A28] border border-[#D9D1C2] text-[10px] font-medium transition cursor-pointer"
-                            title="Item ini belum ada SPJ. Klik untuk membuat kwitansi/daftar honor sekarang"
-                          >
-                            <span className="text-slate-400">○</span>
-                            <span>+ Buat SPJ</span>
-                          </button>
-                        )}
+                          <div className="text-[9px] text-slate-500 font-mono truncate max-w-[140px] mx-auto" title={matchedSpj.nomor}>
+                            {matchedSpj.nomor}
+                          </div>
+                        </div>
                       </td>
 
                       <td className="py-2.5 px-3 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
+                            onClick={() => setQuickDateSpjItem(it)}
+                            title="Atur Tanggal, Bulan, Tahun & Buka Dokumen SPJ Resmi"
+                            className="p-1.5 text-[#059669] hover:bg-emerald-50 rounded-lg transition cursor-pointer"
+                          >
+                            <Calendar className="w-4 h-4" />
+                          </button>
+                          <button
                             onClick={() => onCreateSpjFromItem(it, selectedMonth)}
-                            title="1-Klik Buat Kwitansi / Dokumen SPJ"
+                            title="1-Klik Buka Editor Kwitansi / Dokumen SPJ Resmi"
                             className="p-1.5 text-[#5A5A40] hover:bg-[#E8E2D6] rounded-lg transition cursor-pointer"
                           >
                             <Receipt className="w-4 h-4" />
@@ -890,6 +1027,22 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
                 </span>
               </div>
 
+              {/* Pengisian Tanggal, Bulan, Tahun (Update & Manual) + Dokumen SPJ Resmi */}
+              <FlexibleDateControl
+                tanggal={formTanggal}
+                tanggalManualText={formTanggalManual}
+                defaultMonthIndex={selectedMonth}
+                defaultYear={school.tahunAnggaran || '2026'}
+                spjDocType={formSpjType}
+                showSpjTypeSelector={true}
+                onChange={(newIso, newManual, newType) => {
+                  setFormTanggal(newIso);
+                  setFormTanggalManual(newManual);
+                  if (newType) setFormSpjType(newType);
+                }}
+                label="Tanggal, Bulan & Tahun Belanja (Bisa Update Otomatis / Isi Manual Kapan Saja)"
+              />
+
               <div className="flex items-center justify-end gap-2 pt-2">
                 <button
                   type="button"
@@ -911,6 +1064,59 @@ export const KertasKerjaView: React.FC<KertasKerjaViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Quick Modal: Atur Tanggal, Bulan, Tahun (Update & Manual) & Buka/Cetak 7 Dokumen SPJ Resmi */}
+      {quickDateSpjItem && (
+        <QuickDateSpjModal
+          isOpen={!!quickDateSpjItem}
+          onClose={() => setQuickDateSpjItem(null)}
+          uraian={quickDateSpjItem.uraian}
+          kodeRekening={quickDateSpjItem.kodeRekening}
+          jumlah={quickDateSpjItem.jumlah}
+          volume={quickDateSpjItem.volume}
+          satuan={quickDateSpjItem.satuan}
+          tarifHarga={quickDateSpjItem.tarifHarga}
+          monthIndex={selectedMonth}
+          tanggal={quickDateSpjItem.tanggal}
+          tanggalManualText={quickDateSpjItem.tanggalManualText}
+          spjDocType={quickDateSpjItem.spjDocType}
+          linkedDoc={getItemSpjDoc(quickDateSpjItem)}
+          school={school}
+          sourceArkasType="murni"
+          onSaveDateAndSpj={(newIsoDate, newManualText, newSpjType) => {
+            const updatedItems = currentWs.items.map((it) =>
+              it.id === quickDateSpjItem.id
+                ? {
+                    ...it,
+                    tanggal: newIsoDate,
+                    tanggalManualText: newManualText,
+                    spjDocType: newSpjType
+                  }
+                : it
+            );
+            onUpdateWorksheet({ ...currentWs, items: updatedItems });
+            setQuickDateSpjItem((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    tanggal: newIsoDate,
+                    tanggalManualText: newManualText,
+                    spjDocType: newSpjType
+                  }
+                : null
+            );
+          }}
+          onOpenSpjByType={(chosenType, customIsoDate, customManualText) => {
+            const updatedItem: KertasKerjaItem = {
+              ...quickDateSpjItem,
+              tanggal: customIsoDate,
+              tanggalManualText: customManualText,
+              spjDocType: chosenType
+            };
+            onCreateSpjFromItem(updatedItem, selectedMonth, chosenType);
+          }}
+        />
       )}
     </div>
   );

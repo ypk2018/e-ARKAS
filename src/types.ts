@@ -45,6 +45,9 @@ export interface KertasKerjaItem {
   kegiatanNama?: string;// e.g. "Kegiatan Komunitas Belajar antar sekolah"
   penerimaDefault?: string;
   jabatanDefault?: string;
+  tanggal?: string;           // YYYY-MM-DD (can be updated or set manually to any date/month/year)
+  tanggalManualText?: string; // Optional manual date text e.g. "15 Januari 2026"
+  spjDocType?: SpjType;       // Default/linked official SPJ document type
 }
 
 export interface MonthWorksheet {
@@ -94,6 +97,9 @@ export interface ArkasPerubahanItem {
   kegiatanNama?: string;
   penerimaDefault?: string;
   jabatanDefault?: string;
+  tanggal?: string;
+  tanggalManualText?: string;
+  spjDocType?: SpjType;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -103,6 +109,7 @@ export interface ArkasPerubahanMonthWorksheet {
   bulanNama: string;
   bulanIndex: number;
   totalPenerimaan: number;
+  totalPerubahan?: number;
   items: ArkasPerubahanItem[];
 }
 
@@ -158,6 +165,7 @@ export interface SpjDocument {
   type: SpjType;
   nomor: string;
   tanggal: string;       // YYYY-MM-DD
+  tanggalManualText?: string; // Optional manual/custom date text
   triwulan?: string;      // "I", "II", "III", "IV"
   komponen?: string;
   rekening?: string;

@@ -1,5 +1,6 @@
 import { MonthWorksheet, ArkasPerubahanMonthWorksheet, ArkasPerubahanItem, KertasKerjaItem } from '../types';
 import { INITIAL_KERTAS_KERJA_DATA } from './kertasKerjaData';
+import { MONTH_NAMES } from './schoolProfile';
 
 /**
  * Helper to convert standard MonthWorksheet[] from ARKAS Murni into ArkasPerubahanMonthWorksheet[]
@@ -7,35 +8,49 @@ import { INITIAL_KERTAS_KERJA_DATA } from './kertasKerjaData';
 export function initializePerubahanFromMurni(
   murniWorksheets: MonthWorksheet[]
 ): ArkasPerubahanMonthWorksheet[] {
-  return murniWorksheets.map((ws) => {
-    const items: ArkasPerubahanItem[] = ws.items.map((it, idx) => ({
-      id: `perub_${it.id}`,
-      originalItemId: it.id,
-      noUrut: idx + 1,
-      kodeRekening: it.kodeRekening,
-      kodeProgram: it.kodeProgram,
-      uraian: it.uraian,
-      semulaVolume: it.volume,
-      semulaSatuan: it.satuan,
-      semulaTarif: it.tarifHarga,
-      semulaJumlah: it.jumlah,
-      volume: it.volume,
-      satuan: it.satuan,
-      tarifHarga: it.tarifHarga,
-      jumlah: it.jumlah,
-      selisihJumlah: 0,
-      selisihVolume: 0,
-      statusPerubahan: 'TETAP',
-      alasanPerubahan: 'Sesuai pagu dan perencanaan ARKAS Murni',
-      temaId: it.temaId,
-      temaNama: it.temaNama,
-      subtemaKode: it.subtemaKode,
-      subtemaNama: it.subtemaNama,
-      kegiatanKode: it.kegiatanKode,
-      kegiatanNama: it.kegiatanNama,
-      penerimaDefault: it.penerimaDefault,
-      jabatanDefault: it.jabatanDefault
-    }));
+  return murniWorksheets.map((ws, mIdx) => {
+    const mStr = String(mIdx + 1).padStart(2, '0');
+    const mName = MONTH_NAMES[mIdx] || 'Januari';
+    const items: ArkasPerubahanItem[] = ws.items.map((it, idx) => {
+      const dayNum = Math.min(28, 5 + ((idx * 2) % 22));
+      const dStr = String(dayNum).padStart(2, '0');
+      const isHonor =
+        it.uraian.toLowerCase().includes('honor') ||
+        it.uraian.toLowerCase().includes('gaji') ||
+        it.kodeRekening.includes('5.1.02.02.01.0011') ||
+        it.kodeRekening.includes('5.1.02.02.01.0013');
+      return {
+        id: `perub_${it.id}`,
+        originalItemId: it.id,
+        noUrut: idx + 1,
+        kodeRekening: it.kodeRekening,
+        kodeProgram: it.kodeProgram,
+        uraian: it.uraian,
+        semulaVolume: it.volume,
+        semulaSatuan: it.satuan,
+        semulaTarif: it.tarifHarga,
+        semulaJumlah: it.jumlah,
+        volume: it.volume,
+        satuan: it.satuan,
+        tarifHarga: it.tarifHarga,
+        jumlah: it.jumlah,
+        selisihJumlah: 0,
+        selisihVolume: 0,
+        statusPerubahan: 'TETAP',
+        alasanPerubahan: 'Sesuai pagu dan perencanaan ARKAS Murni',
+        temaId: it.temaId,
+        temaNama: it.temaNama,
+        subtemaKode: it.subtemaKode,
+        subtemaNama: it.subtemaNama,
+        kegiatanKode: it.kegiatanKode,
+        kegiatanNama: it.kegiatanNama,
+        penerimaDefault: it.penerimaDefault,
+        jabatanDefault: it.jabatanDefault,
+        tanggal: it.tanggal || `2026-${mStr}-${dStr}`,
+        tanggalManualText: it.tanggalManualText || `${dayNum} ${mName} 2026`,
+        spjDocType: it.spjDocType || (isHonor ? 'daftar' : 'kwitansi')
+      };
+    });
 
     return {
       bulanKey: ws.bulanKey,
@@ -454,7 +469,28 @@ export function generateRealisticPerubahanData(murniWorksheets: MonthWorksheet[]
     });
   }
 
-  return base;
+  return base.map((ws, mIdx) => {
+    const mStr = String(mIdx + 1).padStart(2, '0');
+    const mName = MONTH_NAMES[mIdx] || 'Januari';
+    return {
+      ...ws,
+      items: ws.items.map((it, idx) => {
+        const dayNum = Math.min(28, 5 + ((idx * 2) % 22));
+        const dStr = String(dayNum).padStart(2, '0');
+        const isHonor =
+          it.uraian.toLowerCase().includes('honor') ||
+          it.uraian.toLowerCase().includes('gaji') ||
+          it.kodeRekening.includes('5.1.02.02.01.0011') ||
+          it.kodeRekening.includes('5.1.02.02.01.0013');
+        return {
+          ...it,
+          tanggal: it.tanggal || `2026-${mStr}-${dStr}`,
+          tanggalManualText: it.tanggalManualText || `${dayNum} ${mName} 2026`,
+          spjDocType: it.spjDocType || (isHonor ? 'daftar' : 'kwitansi')
+        };
+      })
+    };
+  });
 }
 
 export const INITIAL_ARKAS_PERUBAHAN_DATA: ArkasPerubahanMonthWorksheet[] =

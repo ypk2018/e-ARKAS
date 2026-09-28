@@ -31,7 +31,16 @@ import { DEFAULT_SCHOOL_PROFILE, MONTH_NAMES } from './data/schoolProfile';
 import { INITIAL_KERTAS_KERJA_DATA } from './data/kertasKerjaData';
 import { INITIAL_ARKAS_PERUBAHAN_DATA, initializePerubahanFromMurni } from './data/arkasPerubahanData';
 import { INITIAL_USERS } from './data/defaultUsers';
-import { generateNomorDokumen, todayISO, generateUid, formatRp } from './utils/formatters';
+import {
+  generateNomorDokumen,
+  todayISO,
+  generateUid,
+  formatRp,
+  formatTanggalIndo,
+  buildOfficialSpjFromExpenditure,
+  ensureAllExpendituresHaveOfficialSpj,
+  inferDefaultSpjType
+} from './utils/formatters';
 import { printArkasPerubahanWorksheet } from './utils/printDocument';
 
 export function App() {
@@ -98,17 +107,56 @@ export function App() {
     return DEFAULT_SCHOOL_PROFILE;
   });
 
+  // Helper to ensure every item in worksheets has default tanggal, tanggalManualText, and spjDocType
+  const normalizeMurniWorksheets = (wsList: MonthWorksheet[], tahun: number = 2026): MonthWorksheet[] => {
+    return wsList.map((ws, mIdx) => ({
+      ...ws,
+      items: ws.items.map((it, idx) => {
+        const dayNum = Math.min(28, 5 + ((it.noUrut || idx + 1) * 2) % 23);
+        const defIso = `${tahun}-${String(mIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+        const tanggal = it.tanggal || defIso;
+        const tanggalManualText = it.tanggalManualText || formatTanggalIndo(tanggal);
+        const spjDocType = it.spjDocType || inferDefaultSpjType(it.kodeRekening, it.uraian);
+        return {
+          ...it,
+          tanggal,
+          tanggalManualText,
+          spjDocType
+        };
+      })
+    }));
+  };
+
+  const normalizePerubahanWorksheets = (wsList: ArkasPerubahanMonthWorksheet[], tahun: number = 2026): ArkasPerubahanMonthWorksheet[] => {
+    return wsList.map((ws, mIdx) => ({
+      ...ws,
+      items: ws.items.map((it, idx) => {
+        const dayNum = Math.min(28, 5 + ((it.noUrut || idx + 1) * 2) % 23);
+        const defIso = `${tahun}-${String(mIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+        const tanggal = it.tanggal || defIso;
+        const tanggalManualText = it.tanggalManualText || formatTanggalIndo(tanggal);
+        const spjDocType = it.spjDocType || inferDefaultSpjType(it.kodeRekening, it.uraian);
+        return {
+          ...it,
+          tanggal,
+          tanggalManualText,
+          spjDocType
+        };
+      })
+    }));
+  };
+
   // State: 12-Month Worksheets
   const [worksheets, setWorksheets] = useState<MonthWorksheet[]>(() => {
     const saved = localStorage.getItem(LS_WORKSHEETS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        return normalizeMurniWorksheets(JSON.parse(saved));
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_KERTAS_KERJA_DATA;
+    return normalizeMurniWorksheets(INITIAL_KERTAS_KERJA_DATA);
   });
 
   // State: 12-Month Worksheets ARKAS PERUBAHAN
@@ -116,12 +164,12 @@ export function App() {
     const saved = localStorage.getItem(LS_PERUBAHAN);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        return normalizePerubahanWorksheets(JSON.parse(saved));
       } catch (e) {
         console.error(e);
       }
     }
-    return INITIAL_ARKAS_PERUBAHAN_DATA;
+    return normalizePerubahanWorksheets(INITIAL_ARKAS_PERUBAHAN_DATA);
   });
 
   // State: Activity Logs
@@ -137,54 +185,23 @@ export function App() {
     return [];
   });
 
-  // State: SPJ Documents Archive
+  // State: SPJ Documents Archive (Guaranteed official SPJ document for every expenditure item)
   const [documents, setDocuments] = useState<SpjDocument[]>(() => {
+    let baseDocs: SpjDocument[] = [];
     const saved = localStorage.getItem(LS_DOCS);
     if (saved) {
       try {
-        return JSON.parse(saved);
+        baseDocs = JSON.parse(saved);
       } catch (e) {
         console.error(e);
       }
     }
-    return [
-      {
-        id: 'init_doc_1',
-        type: 'kwitansi',
-        nomor: '001/KW/BOSP/SMPN7/I/2026',
-        tanggal: '2026-01-15',
-        terimaDari: 'Bendahara BOSP SMP Negeri 7 Sentani',
-        penerima: 'Toko ATK Papuamas Sentani',
-        penerimaNip: '',
-        jabatanPenerima: 'Penyedia Barang',
-        jumlah: 4768000,
-        uraian: 'Pembayaran belanja alat tulis kantor, kertas HVS, spidol whiteboard, dan supplies administrasi semester genap 2026',
-        triwulan: 'I',
-        rekening: '5.1.02.01.01.0024',
-        komponen: 'Standar 06 - Sarana dan Prasarana',
-        lunas: true,
-        materai: false,
-        rangkap: true
-      },
-      {
-        id: 'init_doc_2',
-        type: 'daftar',
-        nomor: '001/DP/BOSP/SMPN7/I/2026',
-        tanggal: '2026-01-20',
-        kegiatan: 'Pemberian Honorarium Guru & Tenaga Kependidikan Non ASN Bulan Januari 2026',
-        judul: 'Honorarium GTT & PTT Bulan Januari 2026',
-        triwulan: 'I',
-        jumlah: 18000000,
-        items: [
-          { nama: 'Yohanes Tabuni, S.Pd', jabatan: 'Guru Honor IPA', honor: 3000000, pph: 0 },
-          { nama: 'Maria Kmur, S.Pd', jabatan: 'Guru Honor Bahasa Inggris', honor: 3000000, pph: 0 },
-          { nama: 'Daniel Wenda, S.Kom', jabatan: 'Operator Dapodik / TI', honor: 3000000, pph: 0 },
-          { nama: 'Ester Wally', jabatan: 'Tenaga Administrasi', honor: 3000000, pph: 0 },
-          { nama: 'Lukas Ohee', jabatan: 'Petugas Keamanan Sekolah', honor: 3000000, pph: 0 },
-          { nama: 'Marta Done', jabatan: 'Petugas Kebersihan', honor: 3000000, pph: 0 },
-        ]
-      }
-    ];
+    return ensureAllExpendituresHaveOfficialSpj(
+      worksheets,
+      perubahanWorksheets,
+      baseDocs,
+      school
+    );
   });
 
   // UI state
@@ -331,10 +348,22 @@ export function App() {
           if (!isMounted) return;
           isApplyingRemoteUpdateRef.current = true;
 
-          if (json.data.school) setSchool(json.data.school);
-          if (json.data.worksheets) setWorksheets(json.data.worksheets);
-          if (json.data.perubahanWorksheets) setPerubahanWorksheets(json.data.perubahanWorksheets);
-          if (json.data.documents) setDocuments(json.data.documents);
+          const loadedSchool = json.data.school || school;
+          const loadedMurni = json.data.worksheets ? normalizeMurniWorksheets(json.data.worksheets, loadedSchool.tahunAnggaran) : worksheets;
+          const loadedPerub = json.data.perubahanWorksheets ? normalizePerubahanWorksheets(json.data.perubahanWorksheets, loadedSchool.tahunAnggaran) : perubahanWorksheets;
+          const loadedDocs = json.data.documents || documents;
+
+          if (json.data.school) setSchool(loadedSchool);
+          if (json.data.worksheets) setWorksheets(loadedMurni);
+          if (json.data.perubahanWorksheets) setPerubahanWorksheets(loadedPerub);
+          setDocuments(
+            ensureAllExpendituresHaveOfficialSpj(
+              loadedMurni,
+              loadedPerub,
+              loadedDocs,
+              loadedSchool
+            )
+          );
           if (json.data.users) setUsers(json.data.users);
           if (json.data.activityLogs) setActivityLogs(json.data.activityLogs);
 
@@ -584,53 +613,39 @@ export function App() {
   };
 
   // 1-Click Create SPJ from Item in Kertas Kerja / Tema Explorer
-  const handleCreateSpjFromItem = (item: KertasKerjaItem, monthIndex: number) => {
+  const handleCreateSpjFromItem = (item: KertasKerjaItem, monthIndex: number, customSpjType?: SpjType) => {
     if (currentUser?.role === 'BENDAHARA' && !isSpjUnlocked) {
       setIsSpjPasswordModalOpen(true);
       return;
     }
-    const isHonor = item.uraian.toLowerCase().includes('honor') || item.uraian.toLowerCase().includes('gtt') || item.uraian.toLowerCase().includes('ptt');
-    const type: SpjType = isHonor ? 'daftar' : 'kwitansi';
+    const existingDoc = documents.find((d) => d.sourceKertasKerjaId === item.id);
+    const doc = buildOfficialSpjFromExpenditure(
+      item,
+      monthIndex,
+      school,
+      'murni',
+      existingDoc,
+      customSpjType || item.spjDocType
+    );
 
-    const triwulan = monthIndex < 3 ? 'I' : monthIndex < 6 ? 'II' : monthIndex < 9 ? 'III' : 'IV';
-    const num = generateNomorDokumen(type, todayISO(), documents, school);
-
-    const doc: SpjDocument = {
-      id: generateUid(),
-      type,
-      nomor: num,
-      tanggal: `2026-${String(monthIndex + 1).padStart(2, '0')}-25`,
-      terimaDari: `Bendahara ${school.sumberDana} ${school.nama}`,
-      penerima: isHonor ? 'Daftar Terlampir' : `Penyedia / Pelaksana [${item.subtemaNama}]`,
-      jabatanPenerima: isHonor ? 'Tenaga Pendidik / Kependidikan' : 'Penyedia Barang / Jasa',
-      jumlah: item.jumlah,
-      uraian: `Pembayaran belanja: ${item.uraian} (${item.volume} ${item.satuan}) untuk bulan ${MONTH_NAMES[monthIndex]} 2026`,
-      triwulan,
-      rekening: item.kodeRekening,
-      komponen: `Standar ${item.temaId} - ${item.subtemaNama}`,
-      lunas: true,
-      materai: item.jumlah >= 5000000,
-      items: isHonor
-        ? [
-            {
-              nama: 'Penerima Honor 1',
-              jabatan: 'Guru / Tenaga Kependidikan',
-              honor: item.jumlah,
-              pph: 0
-            }
-          ]
-        : [
-            {
-              nama: item.uraian,
-              qty: item.volume,
-              satuan: item.satuan,
-              harga: item.tarifHarga
-            }
-          ]
-    };
-
+    handleSaveOrUpdateOfficialSpj(doc);
     setDraftDoc(doc);
-    setCurrentTab(type);
+    setCurrentTab(doc.type);
+  };
+
+  // Silent save/update of an official SPJ document (from inline date/SPJ controls)
+  const handleSaveOrUpdateOfficialSpj = (doc: SpjDocument) => {
+    setDocuments((prev) => {
+      const idx = prev.findIndex(
+        (d) => d.id === doc.id || (doc.sourceKertasKerjaId && d.sourceKertasKerjaId === doc.sourceKertasKerjaId)
+      );
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = doc;
+        return next;
+      }
+      return [doc, ...prev];
+    });
   };
 
   const handleSaveDocument = (doc: SpjDocument) => {
@@ -710,51 +725,24 @@ export function App() {
     }
   };
 
-  const handleCreateSpjFromPerubahanItem = (item: ArkasPerubahanItem, monthIndex: number) => {
-    const isHonor = item.uraian.toLowerCase().includes('honor') || item.uraian.toLowerCase().includes('gtt') || item.uraian.toLowerCase().includes('ptt');
-    const type: SpjType = isHonor ? 'daftar' : 'kwitansi';
-    const triwulan = monthIndex < 3 ? 'I' : monthIndex < 6 ? 'II' : monthIndex < 9 ? 'III' : 'IV';
-    const num = generateNomorDokumen(type, todayISO(), documents, school);
+  const handleCreateSpjFromPerubahanItem = (item: ArkasPerubahanItem, monthIndex: number, customSpjType?: SpjType) => {
+    if (currentUser?.role === 'BENDAHARA' && !isSpjUnlocked) {
+      setIsSpjPasswordModalOpen(true);
+      return;
+    }
+    const existingDoc = documents.find((d) => d.sourceKertasKerjaId === item.id);
+    const doc = buildOfficialSpjFromExpenditure(
+      item,
+      monthIndex,
+      school,
+      'perubahan',
+      existingDoc,
+      customSpjType || item.spjDocType
+    );
 
-    const doc: SpjDocument = {
-      id: generateUid(),
-      type,
-      nomor: num,
-      tanggal: `2026-${String(monthIndex + 1).padStart(2, '0')}-25`,
-      terimaDari: `Bendahara ${school.sumberDana} ${school.nama}`,
-      penerima: item.penerimaDefault || (isHonor ? 'Daftar Terlampir' : `Penyedia / Pelaksana [${item.subtemaNama}]`),
-      jabatanPenerima: item.jabatanDefault || (isHonor ? 'Tenaga Pendidik / Kependidikan' : 'Penyedia Barang / Jasa'),
-      jumlah: item.jumlah,
-      uraian: `Pembayaran belanja ARKAS Perubahan: ${item.uraian} (${item.volume} ${item.satuan}) untuk bulan ${MONTH_NAMES[monthIndex]} 2026`,
-      triwulan,
-      rekening: item.kodeRekening,
-      komponen: `Standar ${item.temaId} - ${item.subtemaNama}`,
-      lunas: true,
-      materai: item.jumlah >= 5000000,
-      rangkap: true,
-      sourceKertasKerjaId: item.id,
-      sourceArkasType: 'perubahan',
-      items: isHonor
-        ? [
-            {
-              nama: item.penerimaDefault || 'Penerima Honor 1',
-              jabatan: item.jabatanDefault || 'Guru / Tenaga Kependidikan',
-              honor: item.jumlah,
-              pph: 0
-            }
-          ]
-        : [
-            {
-              nama: item.uraian,
-              qty: item.volume,
-              satuan: item.satuan,
-              harga: item.tarifHarga
-            }
-          ]
-    };
-
+    handleSaveOrUpdateOfficialSpj(doc);
     setDraftDoc(doc);
-    setCurrentTab(type);
+    setCurrentTab(doc.type);
   };
 
   const handlePrintPerubahanWorksheet = (monthIndex: number) => {
@@ -1193,8 +1181,13 @@ export function App() {
                 onSelectMonth={setSelectedMonth}
                 onUpdateWorksheet={handleUpdateWorksheet}
                 onCreateSpjFromItem={handleCreateSpjFromItem}
+                onSaveOrUpdateOfficialSpj={handleSaveOrUpdateOfficialSpj}
                 onPrintMonth={handlePrintWorksheet}
                 searchQuery={searchQuery}
+                documents={documents}
+                onOpenSpjDoc={handleOpenDocument}
+                onAddActivityLog={handleAddActivityLog}
+                currentUser={currentUser}
               />
             )}
 
@@ -1208,6 +1201,7 @@ export function App() {
                 onUpdateWorksheet={handleUpdatePerubahanWorksheet}
                 onResetFromMurni={handleResetPerubahanFromMurni}
                 onCreateSpjFromPerubahanItem={handleCreateSpjFromPerubahanItem}
+                onSaveOrUpdateOfficialSpj={handleSaveOrUpdateOfficialSpj}
                 onPrintMonth={handlePrintPerubahanWorksheet}
                 searchQuery={searchQuery}
                 documents={documents}
@@ -1257,17 +1251,26 @@ export function App() {
                   setCurrentTab('arkas-perubahan');
                 }}
                 currentUser={currentUser}
+                documents={documents}
+                onOpenSpjDoc={handleOpenDocument}
+                onCreateSpjFromPerubahanItem={handleCreateSpjFromPerubahanItem}
+                onSaveOrUpdateOfficialSpj={handleSaveOrUpdateOfficialSpj}
               />
             )}
 
             {currentTab === 'tema-explorer' && (
               <TemaExplorerView
                 worksheets={worksheets}
+                school={school}
                 onCreateSpjFromItem={handleCreateSpjFromItem}
                 onSelectMonthAndTab={(mIdx, tab) => {
                   setSelectedMonth(mIdx);
                   setCurrentTab(tab);
                 }}
+                onUpdateWorksheet={handleUpdateWorksheet}
+                documents={documents}
+                onOpenSpjDoc={handleOpenDocument}
+                onSaveOrUpdateOfficialSpj={handleSaveOrUpdateOfficialSpj}
               />
             )}
 
@@ -1279,6 +1282,8 @@ export function App() {
                 onSaveDoc={handleSaveDocument}
                 onPrintDoc={handlePrintDocument}
                 allDocs={documents}
+                worksheets={worksheets}
+                perubahanWorksheets={perubahanWorksheets}
               />
             )}
 

@@ -237,7 +237,7 @@ export const ArsipView: React.FC<ArsipViewProps> = ({
                       {idx + 1}
                     </td>
                     <td className="py-3 px-4 text-[#6B665E] font-mono">
-                      {formatTanggalIndo(doc.tanggal)}
+                      {formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex flex-col gap-1 items-start">
