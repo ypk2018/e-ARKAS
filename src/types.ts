@@ -149,10 +149,14 @@ export interface SpjItem {
   nama: string;
   nip?: string;
   jabatan?: string;
+  mapel?: string;
   qty?: number;
   satuan?: string;
   harga?: number;
   honor?: number;
+  honorPerBulan?: number;
+  jumlahBulan?: number;
+  honorPerSemester?: number;
   pph?: number;
   jumlah?: number;
   ket?: string;
@@ -167,6 +171,12 @@ export interface SpjDocument {
   tanggal: string;       // YYYY-MM-DD
   tanggalManualText?: string; // Optional manual/custom date text
   triwulan?: string;      // "I", "II", "III", "IV"
+  periodePembayaran?: string; // e.g. "Januari s/d Juni 2026"
+  desaPembayaran?: string;
+  kecamatanPembayaran?: string;
+  kabupatenPembayaran?: string;
+  labelKolomHonorTotal?: string; // e.g. "Per Semester"
+  jumlahBulanDefault?: number;   // e.g. 6
   komponen?: string;
   rekening?: string;
   uraian?: string;

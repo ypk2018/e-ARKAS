@@ -203,6 +203,47 @@ export const generateNomorDokumen = (
 export const generateUid = (): string =>
   "doc_" + Math.random().toString(36).substring(2, 9) + "_" + Date.now().toString(36);
 
+export const SMPN7_DEFAULT_TEACHERS: {
+  nama: string;
+  jabatan: string;
+  mapel: string;
+  nip?: string;
+  defaultHonorBulan: number;
+}[] = [
+  { nama: "Maikel Paul Wally, S.Pd", jabatan: "Kepsek & Guru", mapel: "PKn", nip: "197812232003121006", defaultHonorBulan: 800000 },
+  { nama: "Rahel Natalia Done, S.Pd.K", jabatan: "Guru", mapel: "Pend. Agama Kristen", nip: "198812272024212036", defaultHonorBulan: 800000 },
+  { nama: "Levina Katerina Fere, S.Pd", jabatan: "Guru", mapel: "Bahasa Inggris", defaultHonorBulan: 800000 },
+  { nama: "Yoice Dike, S.Pd", jabatan: "Guru", mapel: "Bahasa Indonesia", defaultHonorBulan: 800000 },
+  { nama: "Kostantina Ovide, S.Pd", jabatan: "Guru", mapel: "IPS", defaultHonorBulan: 800000 },
+  { nama: "Yohanes Tabuni, S.Pd", jabatan: "Guru", mapel: "IPA", defaultHonorBulan: 800000 },
+  { nama: "Maria Kmur, S.Pd", jabatan: "Guru", mapel: "Matematika", defaultHonorBulan: 800000 },
+  { nama: "Daniel Wenda, S.Kom", jabatan: "Guru", mapel: "Informatika / TIK", defaultHonorBulan: 800000 },
+  { nama: "Ester Wally, S.Pd", jabatan: "Guru", mapel: "Seni Budaya", defaultHonorBulan: 800000 },
+  { nama: "Lukas Ohee, S.Pd", jabatan: "Guru", mapel: "Penjaskes", defaultHonorBulan: 800000 }
+];
+
+export const getDefaultSmpn7TeachersHonorList = (
+  perBulanNominal = 800000,
+  jumlahBulan = 6
+) => {
+  return SMPN7_DEFAULT_TEACHERS.map((t) => {
+    const perBulan = perBulanNominal || t.defaultHonorBulan;
+    const perSemester = perBulan * jumlahBulan;
+    return {
+      nama: t.nama,
+      nip: t.nip,
+      jabatan: t.jabatan,
+      mapel: t.mapel,
+      honorPerBulan: perBulan,
+      jumlahBulan,
+      honorPerSemester: perSemester,
+      honor: perSemester,
+      pph: 0,
+      jumlah: perSemester
+    };
+  });
+};
+
 /**
  * Builds a complete, official SpjDocument from any expenditure item (KertasKerjaItem or ArkasPerubahanItem)
  */
@@ -239,9 +280,22 @@ export const buildOfficialSpjFromBelanjaItem = (
 
   const defaultJabatan =
     item.jabatanDefault ||
-    (isHonor ? "Tenaga Pendidik / Kependidikan" : "Penyedia Barang / Jasa");
+    (isHonor ? "Guru" : "Penyedia Barang / Jasa");
+
+  const matchedTeacher = SMPN7_DEFAULT_TEACHERS.find((t) =>
+    defaultPenerima.toLowerCase().includes(t.nama.split(",")[0].toLowerCase())
+  );
+  const defaultMapel = matchedTeacher?.mapel || (isHonor ? "Mata Pelajaran Umum" : "-");
 
   const labelArkas = sourceArkasType === "perubahan" ? "ARKAS Perubahan" : "ARKAS Reguler (Murni)";
+  const defaultPeriode =
+    effectiveMonthIdx < 6
+      ? `Januari s/d Juni ${parsedDate.year}`
+      : `Juli s/d Desember ${parsedDate.year}`;
+
+  const jmlBulan = Math.max(1, item.volume || 1);
+  const honorBulan = item.tarifHarga || item.jumlah;
+  const honorTotal = item.jumlah || honorBulan * jmlBulan;
 
   return {
     id: `spj_${sourceArkasType}_${item.id}`,
@@ -250,6 +304,12 @@ export const buildOfficialSpjFromBelanjaItem = (
     tanggal: parsedDate.isoDate,
     tanggalManualText: item.tanggalManualText || parsedDate.formatted,
     triwulan,
+    periodePembayaran: isHonor ? `${parsedDate.monthName} ${parsedDate.year} (${defaultPeriode})` : defaultPeriode,
+    desaPembayaran: school.desa || "Hinekombe",
+    kecamatanPembayaran: school.kecamatan || "Sentani",
+    kabupatenPembayaran: school.kabupaten || "Jayapura",
+    labelKolomHonorTotal: "Per Semester",
+    jumlahBulanDefault: jmlBulan,
     terimaDari: `Bendahara ${school.sumberDana} ${school.nama}`,
     penerima: defaultPenerima,
     jabatanPenerima: defaultJabatan,
@@ -258,7 +318,9 @@ export const buildOfficialSpjFromBelanjaItem = (
     tokoPic: defaultPenerima,
     pihak2Nama: defaultPenerima,
     pihak2Jabatan: defaultJabatan,
-    judul: `${item.uraian} (${parsedDate.monthName} ${parsedDate.year})`,
+    judul: isHonor
+      ? "TANDA TERIMA HONOR RUTIN GURU / GBPNS"
+      : `${item.uraian} (${parsedDate.monthName} ${parsedDate.year})`,
     kegiatan: item.kegiatanNama || item.subtemaNama || item.uraian,
     jumlah: item.jumlah,
     uraian: `Pembayaran belanja ${labelArkas}: ${item.uraian} (${item.volume} ${item.satuan} @ ${formatRp(
@@ -279,9 +341,13 @@ export const buildOfficialSpjFromBelanjaItem = (
           {
             nama: defaultPenerima,
             jabatan: defaultJabatan,
-            honor: item.jumlah,
+            mapel: defaultMapel,
+            honorPerBulan: honorBulan,
+            jumlahBulan: jmlBulan,
+            honorPerSemester: honorTotal,
+            honor: honorTotal,
             pph: 0,
-            jumlah: item.jumlah
+            jumlah: honorTotal
           }
         ]
       : [

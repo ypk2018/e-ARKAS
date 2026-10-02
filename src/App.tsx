@@ -39,7 +39,8 @@ import {
   formatTanggalIndo,
   buildOfficialSpjFromExpenditure,
   ensureAllExpendituresHaveOfficialSpj,
-  inferDefaultSpjType
+  inferDefaultSpjType,
+  getDefaultSmpn7TeachersHonorList
 } from './utils/formatters';
 import { printArkasPerubahanWorksheet } from './utils/printDocument';
 
@@ -590,21 +591,33 @@ export function App() {
     setCurrentTab(tab);
     if (['kwitansi', 'daftar', 'nota', 'faktur', 'bkk', 'berita', 'sptj'].includes(tab)) {
       const type = tab as SpjType;
+      const defaultTeachersList = type === 'daftar' ? getDefaultSmpn7TeachersHonorList(undefined, 6) : [];
+      const defaultDaftarTotal = defaultTeachersList.reduce((s, it) => s + (it.honorPerSemester || it.honor || 0), 0);
       setDraftDoc({
         id: generateUid(),
         type,
         nomor: generateNomorDokumen(type, todayISO(), documents, school),
         tanggal: todayISO(),
         terimaDari: `Bendahara ${school.sumberDana} ${school.nama}`,
-        penerima: '',
-        jumlah: 500000,
-        uraian: '',
+        penerima: type === 'daftar' ? 'Guru & Tenaga Kependidikan SMP Negeri 7 Sentani (10 Orang)' : '',
+        judul: type === 'daftar' ? 'TANDA TERIMA HONOR RUTIN GURU / GBPNS' : undefined,
+        periodePembayaran: type === 'daftar' ? `Januari s/d Juni ${school.tahunAnggaran || '2026'}` : undefined,
+        desaPembayaran: type === 'daftar' ? (school.desa || 'Hinekombe') : undefined,
+        kecamatanPembayaran: type === 'daftar' ? (school.kecamatan || 'Sentani') : undefined,
+        kabupatenPembayaran: type === 'daftar' ? (school.kabupaten || 'Jayapura') : undefined,
+        labelKolomHonorTotal: type === 'daftar' ? 'Per Semester' : undefined,
+        jumlahBulanDefault: type === 'daftar' ? 6 : undefined,
+        jumlah: type === 'daftar' ? defaultDaftarTotal : 500000,
+        uraian:
+          type === 'daftar'
+            ? `Pembayaran Honor Rutin Guru / GBPNS ${school.nama} Periode Januari s/d Juni ${school.tahunAnggaran || '2026'}`
+            : '',
         triwulan: selectedMonth < 3 ? 'I' : selectedMonth < 6 ? 'II' : selectedMonth < 9 ? 'III' : 'IV',
         lunas: true,
-        materai: false,
+        materai: type === 'daftar' ? defaultDaftarTotal >= 5000000 : false,
         items:
           type === 'daftar'
-            ? [{ nama: 'Guru Honor 1', jabatan: 'Guru Mata Pelajaran', honor: 1500000, pph: 0 }]
+            ? defaultTeachersList
             : type === 'nota' || type === 'faktur'
             ? [{ nama: 'Barang Perlengkapan Sekolah', qty: 1, satuan: 'paket', harga: 500000 }]
             : undefined

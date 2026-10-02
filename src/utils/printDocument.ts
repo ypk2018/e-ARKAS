@@ -436,7 +436,7 @@ export function generateSingleDocPageHtml(
 
   const docTitleMap: Record<string, string> = {
     kwitansi: 'KWITANSI / BUKTI PEMBAYARAN BOSP',
-    daftar: 'DAFTAR PENERIMAAN HONORARIUM',
+    daftar: 'DAFTAR PEMBAYARAN',
     nota: 'NOTA PEMBELIAN TOKO',
     faktur: 'FAKTUR BARANG & JASA',
     bkk: 'BUKTI KAS KELUAR (BKK)',
@@ -553,76 +553,127 @@ export function generateSingleDocPageHtml(
         </div>
       ` : ''}
 
-      <!-- TYPE 2: DAFTAR HONORARIUM -->
-      ${isDaftar ? `
-        <div class="doc-title-container">
-          <div class="doc-title">${currentDocTitle}</div>
-          <div style="font-size: 10.5pt; font-weight: bold; margin-top: 2pt;">${doc.judul || doc.kegiatan || 'Penerimaan Honorarium Kegiatan'}</div>
+      <!-- TYPE 2: DAFTAR PEMBAYARAN (TANDA TERIMA HONOR RUTIN GURU / GBPNS SMP NEGERI 7 SENTANI) -->
+      ${isDaftar ? (() => {
+        const daftarItems = (doc.items && doc.items.length > 0)
+          ? doc.items
+          : [{
+              nama: doc.penerima || 'Guru Honor SMP Negeri 7 Sentani',
+              jabatan: doc.jabatanPenerima || 'Guru',
+              mapel: 'Mata Pelajaran',
+              honorPerBulan: doc.jumlah || 250000,
+              jumlahBulan: doc.jumlahBulanDefault || 6,
+              honorPerSemester: doc.jumlah || 1500000,
+              honor: doc.jumlah || 1500000
+            }];
+        const labelKolomTotal = doc.labelKolomHonorTotal || 'Per Semester';
+
+        return `
+        <div class="doc-title-container" style="margin-bottom: 6pt;">
+          <div class="doc-title" style="font-size: 12.5pt; letter-spacing: 0.4pt;">${doc.judul || 'TANDA TERIMA HONOR RUTIN GURU / GBPNS'}</div>
           <div class="doc-number">Nomor : <b>${doc.nomor}</b></div>
         </div>
 
-        <table class="data-table">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 8pt; font-family: Arial, Helvetica, sans-serif; font-size: 9pt;">
+          <table style="border-collapse: collapse; font-size: 9pt;">
+            <tbody>
+              <tr>
+                <td style="width: 95pt; padding: 1.5pt 0; font-weight: 600;">Nama Sekolah</td>
+                <td style="width: 10pt; padding: 1.5pt 0; text-align: center;">:</td>
+                <td style="padding: 1.5pt 0; font-weight: bold;">${school.nama}</td>
+              </tr>
+              <tr>
+                <td style="padding: 1.5pt 0; font-weight: 600;">Desa / Kampung</td>
+                <td style="padding: 1.5pt 0; text-align: center;">:</td>
+                <td style="padding: 1.5pt 0;">${doc.desaPembayaran || school.desa || 'Hinekombe'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 1.5pt 0; font-weight: 600;">Kecamatan</td>
+                <td style="padding: 1.5pt 0; text-align: center;">:</td>
+                <td style="padding: 1.5pt 0;">${doc.kecamatanPembayaran || school.kecamatan || 'Sentani'}</td>
+              </tr>
+              <tr>
+                <td style="padding: 1.5pt 0; font-weight: 600;">Kabupaten</td>
+                <td style="padding: 1.5pt 0; text-align: center;">:</td>
+                <td style="padding: 1.5pt 0;">${doc.kabupatenPembayaran || school.kabupaten || 'Jayapura'}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-weight: bold; padding-bottom: 2pt;">
+            : ${doc.periodePembayaran || `Januari s/d Juni ${school.tahunAnggaran || '2026'}`}
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; margin: 4pt 0 10pt 0; font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; border: 1pt solid #000000;">
           <thead>
-            <tr>
-              <th style="width: 24pt;">No</th>
-              <th>Nama Penerima</th>
-              <th style="width: 90pt;">Jabatan / Tugas</th>
-              <th style="width: 75pt;">Honor Bruto</th>
-              <th style="width: 60pt;">PPh 21</th>
-              <th style="width: 75pt;">Honor Netto</th>
-              <th style="width: 80pt;">Tanda Tangan</th>
+            <tr style="background-color: #ffffff;">
+              <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt 3pt; width: 24pt; text-align: center; font-weight: bold;">No</th>
+              <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt 5pt; text-align: center; font-weight: bold;">Nama</th>
+              <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt 4pt; width: 70pt; text-align: center; font-weight: bold;">Jabatan</th>
+              <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt 4pt; width: 82pt; text-align: center; font-weight: bold;">Mapel</th>
+              <th colspan="2" style="border: 1pt solid #000000; padding: 3pt 4pt; text-align: center; font-weight: bold;">Honorarium</th>
+              <th rowspan="2" style="border: 1pt solid #000000; padding: 4pt 4pt; width: 85pt; text-align: center; font-weight: bold;">Tanda Tangan</th>
+            </tr>
+            <tr style="background-color: #ffffff;">
+              <th style="border: 1pt solid #000000; padding: 3pt 4pt; width: 70pt; text-align: center; font-weight: bold;">Per Bulan</th>
+              <th style="border: 1pt solid #000000; padding: 3pt 4pt; width: 78pt; text-align: center; font-weight: bold;">${labelKolomTotal}</th>
             </tr>
           </thead>
           <tbody>
-            ${(doc.items && doc.items.length > 0 ? doc.items : [{ nama: doc.penerima || 'Tenaga Pendidik', jabatan: doc.jabatanPenerima || 'Guru', honor: doc.jumlah, pph: 0 }]).map((it, idx) => {
-              const bruto = it.honor || 0;
-              const pph = it.pph || 0;
-              const netto = bruto - pph;
+            ${daftarItems.map((it, idx) => {
+              const jmlBulan = it.jumlahBulan || doc.jumlahBulanDefault || 1;
+              const perBulan = it.honorPerBulan ?? Math.round((it.honor || 0) / jmlBulan);
+              const perSemester = it.honorPerSemester ?? it.honor ?? (perBulan * jmlBulan);
+              const isOdd = (idx + 1) % 2 === 1;
               return `
                 <tr>
-                  <td class="text-center font-bold">${idx + 1}</td>
-                  <td><b>${it.nama || '-'}</b></td>
-                  <td>${it.jabatan || '-'}</td>
-                  <td class="text-right font-mono">${formatRp(bruto)}</td>
-                  <td class="text-right font-mono">${formatRp(pph)}</td>
-                  <td class="text-right font-mono font-bold">${formatRp(netto)}</td>
-                  <td class="text-left" style="font-size: 8pt; color: #555555; padding-left: 8pt;">${idx + 1}. ................</td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 3pt; text-align: center;">${idx + 1}${idx >= 3 ? '.' : ''}</td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 5pt; font-weight: 500;">
+                    ${it.nama || '-'}
+                  </td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 4pt; text-align: center;">${it.jabatan || 'Guru'}</td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 4pt; text-align: center;">${it.mapel || '-'}</td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 5pt; text-align: center; font-family: 'Courier New', monospace;">
+                    ${formatRp(perBulan)}
+                  </td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 5pt; text-align: center; font-family: 'Courier New', monospace;">
+                    ${formatRp(perSemester)}
+                  </td>
+                  <td style="border: 1pt solid #000000; padding: 4pt 6pt; font-size: 8pt; vertical-align: top;">
+                    <div style="${isOdd ? 'text-align: left;' : 'text-align: center; padding-left: 14pt;'}">${idx + 1}</div>
+                  </td>
                 </tr>
               `;
             }).join('')}
-          </tbody>
-          <tfoot>
-            <tr>
-              <td colspan="3" class="text-right font-bold font-sans">TOTAL KESELURUHAN :</td>
-              <td class="text-right font-mono font-bold">${formatRp(doc.jumlah)}</td>
-              <td class="text-right font-mono font-bold">${formatRp((doc.items || []).reduce((s, it) => s + (it.pph || 0), 0))}</td>
-              <td class="text-right font-mono font-bold" style="font-size: 10pt;">${formatRp(doc.jumlah - (doc.items || []).reduce((s, it) => s + (it.pph || 0), 0))}</td>
-              <td></td>
+            <tr style="font-weight: bold;">
+              <td colspan="5" style="border: 1pt solid #000000; padding: 5pt 6pt; text-align: center; font-weight: bold;">TOTAL</td>
+              <td style="border: 1pt solid #000000; padding: 5pt 5pt; text-align: right; font-weight: bold; font-family: 'Courier New', monospace;">
+                ${formatRp(doc.jumlah)}
+              </td>
+              <td style="border: none;"></td>
             </tr>
-          </tfoot>
+          </tbody>
         </table>
 
-        <div style="font-size: 9.5pt; font-style: italic; margin-top: 6pt;">
-          Terbilang: <b>" ${terbilang(doc.jumlah)} Rupiah "</b>
-        </div>
-
-        <div class="grid-signatures" style="margin-top: 20pt;">
-          <div class="sig-col" style="width: 50%;">
-            <div>Mengetahui,</div>
-            <div class="font-bold">Kepala Sekolah</div>
+        <div class="grid-signatures" style="margin-top: 18pt;">
+          <div class="sig-col" style="width: 50%; text-align: left; padding-left: 16pt;">
+            <div style="height: 12pt;"></div>
+            <div class="font-bold">Kepala ${school.nama}</div>
             <div class="sig-space"></div>
             <div class="sig-name">${school.kepsekNama}</div>
             <div>NIP. ${school.kepsekNip}</div>
           </div>
-          <div class="sig-col" style="width: 50%;">
-            <div>Sentani, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
-            <div class="font-bold">Bendahara BOSP</div>
+          <div class="sig-col" style="width: 50%; text-align: left; padding-left: 36pt;">
+            <div>Lunas dibayar, ${formatTanggalIndo(doc.tanggal, doc.tanggalManualText)}</div>
+            <div class="font-bold">Bendahara</div>
             <div class="sig-space"></div>
             <div class="sig-name">${school.bendaharaNama}</div>
             <div>NIP. ${school.bendaharaNip}</div>
           </div>
         </div>
-      ` : ''}
+      `;
+      })() : ''}
 
       <!-- TYPE 3: NOTA & FAKTUR TOKO -->
       ${isNota ? `
